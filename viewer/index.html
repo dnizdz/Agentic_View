@@ -125,6 +125,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     <div class="seg" role="group" aria-label="View mode"><button id="vbd" aria-pressed="true">Board</button><button id="v2d" aria-pressed="false">2D</button><button id="v3d" aria-pressed="false">3D</button></div>
     <button class="btn ghost sm" id="b-rescan" hidden>Rescan</button>
     <button class="btn sm" id="b-new" hidden>New project</button>
+    <button class="btn ghost sm" id="b-global" hidden title="Edit your global Claude instructions">Global CLAUDE.md</button>
     <button class="btn ghost sm" id="b-setup" hidden>Claude setup</button>
     <span class="tag warn" id="noserver" hidden title="Chat, Files and Scripts need the local server">viewer only: run start.bat for chat, files, scripts</span>
     <div class="stats" id="stats" aria-live="polite"></div>
@@ -835,6 +836,32 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     }).catch(function (e) { st.textContent = "error: " + e.message; });
   }
 
+  function openGlobal() {
+    api("/api/global-claude").then(function (g) {
+      showModal(function (d) {
+        d.appendChild(el("h2", { id: "mtitle", text: "Global CLAUDE.md" }));
+        d.appendChild(el("div", { class: "sub", text: g.path }));
+        d.appendChild(el("div", { class: "banner", text: "These instructions apply to every Claude session you start, in every project. Live sessions in this app keep the old text until you end and restart them. The previous version is saved under out/backups/global." }));
+        var ta = el("textarea", { class: "ed", spellcheck: "false", "aria-label": "Global CLAUDE.md", style: "min-height:380px;width:100%" });
+        ta.value = g.content;
+        if (g.readOnly) ta.readOnly = true;
+        var st = el("div", { class: "sub", text: g.exists ? "loaded" + (g.crlf ? " (CRLF line endings kept on save)" : "") : "file does not exist yet, saving creates it" });
+        var hash = g.hash, dirty = false;
+        var save = el("button", { class: "btn", text: "Save", disabled: "disabled" });
+        ta.addEventListener("input", function () { dirty = true; save.disabled = !!g.readOnly; st.textContent = "unsaved changes"; });
+        save.addEventListener("click", function () {
+          if (!window.confirm("Save changes to your global CLAUDE.md?\n\nThis changes how Claude behaves in every project.")) return;
+          save.disabled = true; st.textContent = "saving";
+          api("/api/global-claude", "POST", { content: ta.value, hash: hash, confirm: true }).then(function (r) {
+            hash = r.hash; dirty = false; st.textContent = "saved. Previous version kept under out/backups/global."; toast("Saved global CLAUDE.md");
+          }).catch(function (e) { save.disabled = false; st.textContent = "save failed: " + e.message; });
+        });
+        function close() { if (dirty && !window.confirm("Discard unsaved changes?")) return; closeModal(); }
+        [ta, st, el("div", { class: "row" }, [save, el("button", { class: "btn ghost", text: "Close", onclick: close })])].forEach(function (x) { d.appendChild(x); });
+      });
+    }).catch(function (e) { toast("global CLAUDE.md: " + e.message); });
+  }
+
   function openNewProject() {
     var names = projects.filter(function (p) { return !p.archived; }).map(function (p) { return p.id; });
     showModal(function (d) {
@@ -907,6 +934,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
   if (AV) {
     $("b-rescan").hidden = false; $("b-setup").hidden = false; $("b-new").hidden = !!AV.readOnly;
     $("b-new").addEventListener("click", openNewProject);
+    $("b-global").hidden = false; $("b-global").addEventListener("click", openGlobal);
     $("b-rescan").addEventListener("click", rescan);
     $("b-setup").addEventListener("click", openSetup);
     api("/api/state").then(function (s) {

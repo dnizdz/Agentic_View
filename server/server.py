@@ -106,6 +106,7 @@ def confine(pid, rel):
 
 
 SCAN_ROOT = Path(CFG["root"]).resolve()
+GLOBAL_MD = Path.home() / ".claude" / "CLAUDE.md"   # the only file the global editor can touch
 NAME_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9 ._&()+-]{0,58}[A-Za-z0-9)])?$")
 RESERVED = {"con", "prn", "aux", "nul"} | {f"com{i}" for i in range(1, 10)} | {f"lpt{i}" for i in range(1, 10)}
 
@@ -511,6 +512,16 @@ class H(BaseHTTPRequestHandler):
                    and Path(n["path"]).suffix.lower() in scripts_ext()]
             res.sort(key=lambda x: x["path"].lower())
             return self._send(200, {"scripts": res})
+        if p == "/api/global-claude":
+            raw = GLOBAL_MD.read_bytes() if GLOBAL_MD.exists() else b""
+            if len(raw) > MAX_FILE:
+                return self._err(413, "file too large")
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                return self._err(415, "not a UTF-8 text file")
+            return self._send(200, {"path": str(GLOBAL_MD), "exists": GLOBAL_MD.exists(), "content": text.replace("\r\n", "\n"),
+                                    "hash": hashlib.sha1(raw).hexdigest() if raw else "", "crlf": "\r\n" in text, "readOnly": S["read_only"]})
         if p == "/api/runs":
             with S_LOCK:
                 return self._send(200, {"runs": [r.info() for r in S["runs"].values()]})
@@ -598,6 +609,30 @@ class H(BaseHTTPRequestHandler):
             else:
                 return self._err(403, "stdin not accepted for this run")
             return self._send(200, {"ok": True})
+
+        if p == "/api/global-claude":
+            if S["read_only"]:
+                return self._err(403, "server is read-only")
+            if b.get("confirm") is not True or not isinstance(b.get("content"), str):
+                return self._err(400, "needs content and confirm")
+            content = b["content"]
+            if len(content.encode("utf-8")) > MAX_FILE:
+                return self._err(413, "too large")
+            old = GLOBAL_MD.read_bytes() if GLOBAL_MD.exists() else None
+            if (hashlib.sha1(old).hexdigest() if old else "") != b.get("hash", ""):
+                return self._err(409, "file changed on disk since it was loaded")
+            if old is not None and b"\r\n" in old:
+                content = content.replace("\r\n", "\n").replace("\n", "\r\n")
+            if old is not None:
+                bdir = OUT / "backups" / "global"
+                bdir.mkdir(parents=True, exist_ok=True)
+                (bdir / f"{time.strftime('%Y%m%d-%H%M%S')}_CLAUDE.md").write_bytes(old)
+            GLOBAL_MD.parent.mkdir(parents=True, exist_ok=True)
+            tmp = GLOBAL_MD.with_name("CLAUDE.md.av-tmp")
+            tmp.write_bytes(content.encode("utf-8"))
+            os.replace(tmp, GLOBAL_MD)
+            log("saved global CLAUDE.md")
+            return self._send(200, {"hash": hashlib.sha1(content.encode("utf-8")).hexdigest()})
 
         if p == "/api/project/new":
             if S["read_only"]:
