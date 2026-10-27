@@ -22,11 +22,11 @@ Module-level detail: the project is four small files, each documented by its pub
 - External: optionally runs `schtasks /query` (read-only, Windows) when `schedule` is enabled.
 
 ### server/server.py
-- Purpose: local HTTP server (standard library). Streams `claude -p` chat, runs and stops scanned scripts, reads and writes project files, reruns the scanner, runs the Claude install and sign-in.
+- Purpose: local HTTP server (standard library). Keeps a live `claude` session per project (stream-json over stdin/stdout, replayable), creates new projects (folder, CLAUDE.md goal/tasks/related, Handover, architecture stub), runs and stops scanned scripts, reads and writes project files, reruns the scanner, runs the Claude install and sign-in.
 - Cross-module calls: imports `scanner/scan.py` for config defaults and the secret-file globs; reads `out/graph.json` to map project and file ids to folders; starts `scanner/scan.py` as a subprocess; writes file edits and backups (`out/backups/`).
 - Depends on (this codebase): `scanner/scan.py`, `out/graph.json`.
 - Called by / Depended on by (this codebase): `viewer/index.html` calls its `/api/*` endpoints.
-- External: spawns the `claude` CLI per chat and for sign-in; runs the official Claude installer command (fixed per OS, only after the page echoes it back); runs scanned scripts with the local interpreter.
+- External: spawns one long-lived `claude` process per live session and `claude auth login` for sign-in; runs the official Claude installer command (fixed per OS, only after the page echoes it back); runs scanned scripts with the local interpreter.
 
 ### scanner/impact.py
 - Purpose: answer "what breaks if I change this file" and "what touches this target".
@@ -59,7 +59,8 @@ flowchart LR
 ## External system boundaries
 - Windows Task Scheduler: `scan.py` reads task names and commands with `schtasks /query` to mark scheduled scripts. Read-only, off by default.
 - CDN (cdnjs, unpkg, Google Fonts): the viewer fetches Cytoscape.js, 3d-force-graph and fonts at page load.
-- Claude CLI: the server spawns `claude -p --output-format stream-json` in a project folder for chat, and `claude auth login` for sign-in. Prompts go to Anthropic through the CLI.
+- Claude CLI: the server spawns a long-lived `claude -p --input-format stream-json --output-format stream-json` process in a project folder per live session (max 6), and `claude auth login` for sign-in. Prompts go to Anthropic through the CLI.
+- Scan root: the server creates new project folders (scaffold files only) directly under the configured scan root; names are validated and existing folders are never overwritten.
 - Claude installer: the server can run the official install command (`irm https://claude.ai/install.ps1 | iex` on Windows, `curl -fsSL https://claude.ai/install.sh | bash` elsewhere) after the user confirms it in the page.
 - Local processes: scanned scripts run with the local interpreter (`python`, `node`, PowerShell, cmd) in their own folder, no arguments, after a confirm dialog.
 - Project files: the server reads and writes text files inside a scanned project folder; secret files (.env, keys, tokens) and `.git` are refused; previous versions go to `out/backups/`.
@@ -68,7 +69,7 @@ flowchart LR
 ## Known gaps / TODO
 - Function level covers Python only (top-level functions and classes; class methods are not separate nodes). JS/TS stay file-level.
 - Static analysis cannot see dynamic imports, runtime-built URLs or data passed through sheets; edges carry a confidence tag (exact, resolved, heuristic, doc).
-- Chat uses `claude -p` (no interactive TUI). Permission prompts cannot be answered live: modes are project settings, accept-edits, plan, or bypass (needs `--allow-bypass`).
+- Chat is a live stream-json session, not a PTY terminal (no slash commands or TUI). The CLI cannot ask the page to approve a tool: denied tools are reported in the chat. Modes are project settings, accept-edits, plan, or bypass (needs `--allow-bypass`). A real terminal (PTY plus xterm.js) is not built.
 - The server has no multi-user auth. It is for the local machine only.
 
 ## Last checked

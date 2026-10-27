@@ -124,6 +124,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     <h1>agentic<span>_</span>view</h1>
     <div class="seg" role="group" aria-label="View mode"><button id="vbd" aria-pressed="true">Board</button><button id="v2d" aria-pressed="false">2D</button><button id="v3d" aria-pressed="false">3D</button></div>
     <button class="btn ghost sm" id="b-rescan" hidden>Rescan</button>
+    <button class="btn sm" id="b-new" hidden>New project</button>
     <button class="btn ghost sm" id="b-setup" hidden>Claude setup</button>
     <span class="tag warn" id="noserver" hidden title="Chat, Files and Scripts need the local server">viewer only: run start.bat for chat, files, scripts</span>
     <div class="stats" id="stats" aria-live="polite"></div>
@@ -148,6 +149,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     <div class="legend" aria-hidden="true">
       <span><i style="border-color:var(--imports)"></i>imports</span>
       <span><i style="border-color:var(--calls)"></i>calls</span>
+      <span><i style="border-color:#38bdf8"></i>declared</span>
       <span><i style="border-color:var(--reads)"></i>reads files</span>
       <span><i style="border-color:var(--runs)"></i>runs</span>
       <span><i style="border-color:var(--target)"></i>uses target</span>
@@ -240,7 +242,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     $("stats").appendChild(el("span", {}, [s[0] + " ", el("b", { text: String(s[1]) })]));
   });
 
-  var KCOL = { imports: "#60a5fa", reads_file: "#fbbf24", runs: "#22c55e", uses_target: "#c084fc", calls: "#f472b6" };
+  var KCOL = { imports: "#60a5fa", reads_file: "#fbbf24", runs: "#22c55e", uses_target: "#c084fc", calls: "#f472b6", declared: "#38bdf8" };
   var cy = cytoscape({
     container: $("cy"), wheelSensitivity: 0.25, minZoom: 0.05, maxZoom: 4,
     style: [
@@ -590,7 +592,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
   var chats = {}, pinfo = {};
   function getChat(pid) {
     if (chats[pid]) return chats[pid];
-    var c = { pid: pid, box: el("div", { class: "term chatbox", "aria-live": "polite" }), sid: store("av.sid." + pid) || "", busy: false, runId: null, cur: null, partial: false, tools: {} };
+    var c = { pid: pid, box: el("div", { class: "term chatbox", "aria-live": "polite" }), sid: store("av.sid." + pid) || "", runId: null, live: false, busy: false, cur: null, partial: false, tools: {}, mode: "project", ctx: "full", startMode: null, startCtx: null, checked: false, sync: null };
     chats[pid] = c; return c;
   }
   function addMsg(c, cls, text) { var e = el("div", { class: "msg " + cls, text: text }); c.box.appendChild(e); c.box.scrollTop = c.box.scrollHeight; return e; }
@@ -598,6 +600,12 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     if (!inp) return "";
     var s = inp.command || inp.file_path || inp.pattern || inp.path || inp.url || inp.description || JSON.stringify(inp);
     return String(s).slice(0, 160);
+  }
+  function userText(o) {
+    var cn = o.message && o.message.content;
+    if (typeof cn === "string") return cn;
+    if (!Array.isArray(cn)) return "";
+    return cn.filter(function (b) { return b.type === "text"; }).map(function (b) { return b.text; }).join("\n");
   }
   function chatEvent(c, line) {
     var o; try { o = JSON.parse(line); } catch (e) { addMsg(c, "sys", line); return; }
@@ -618,8 +626,9 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
         }
       });
       c.cur = null; c.partial = false; c.box.scrollTop = c.box.scrollHeight;
-    } else if (o.type === "user" && o.message && Array.isArray(o.message.content)) {
-      o.message.content.forEach(function (b) {
+    } else if (o.type === "user" && o.message) {
+      var ut = userText(o); if (ut) addMsg(c, "user", ut);
+      if (Array.isArray(o.message.content)) o.message.content.forEach(function (b) {
         if (b.type === "tool_result" && c.tools[b.tool_use_id]) {
           var txt = typeof b.content === "string" ? b.content : JSON.stringify(b.content);
           c.tools[b.tool_use_id].appendChild(el("details", {}, [el("summary", { text: "result" + (b.is_error ? " (error)" : "") }), el("pre", { text: String(txt).slice(0, 1500) })]));
@@ -627,50 +636,103 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       });
     } else if (o.type === "result") {
       addMsg(c, o.is_error ? "err" : "sys", (o.is_error ? "error: " : "done ") + (o.total_cost_usd != null ? "$" + Number(o.total_cost_usd).toFixed(4) + " " : "") + (o.duration_ms ? Math.round(o.duration_ms / 1000) + "s" : ""));
+      var dn = o.permission_denials || [];
+      if (dn.length) addMsg(c, "err", "blocked by permissions: " + dn.map(function (d) { return d.tool_name + " " + toolSummary(d.tool_input); }).join("; ") + ". Switch the mode to Accept edits (or Bypass) and ask again.");
       if (o.session_id) { c.sid = o.session_id; store("av.sid." + c.pid, c.sid); }
+      c.busy = false; if (c.sync) c.sync();
     }
+  }
+  function attach(c, runId, keep) {
+    c.runId = runId; c.live = true; c.busy = false; c.cur = null; c.tools = {};
+    if (!keep) c.box.innerHTML = "";
+    var feed = "";
+    streamRun(runId, function (t) {
+      feed += t; var i;
+      while ((i = feed.indexOf("\n")) >= 0) { var line = feed.slice(0, i); feed = feed.slice(i + 1); if (line.trim()) chatEvent(c, line); }
+    }, function (code) {
+      if (feed.trim()) chatEvent(c, feed);
+      if (c.runId === runId) { c.runId = null; c.live = false; c.busy = false; addMsg(c, "sys", "session ended" + (code ? " (code " + code + ")" : "") + ". Send a message to resume it."); }
+      if (c.sync) c.sync();
+    });
+    if (c.sync) c.sync();
+  }
+  function startSession(c, keep) {
+    return api("/api/run", "POST", { kind: "session", project: c.pid, mode: c.mode, context: c.ctx, confirm_bypass: c.mode === "bypass", session_id: c.sid || undefined })
+      .then(function (r) { c.startMode = c.mode; c.startCtx = c.ctx; attach(c, r.id, keep); return r.id; });
+  }
+  function endSession(c) {
+    if (!c.runId) return Promise.resolve();
+    var id = c.runId;
+    return api("/api/run/" + id + "/stop", "POST", {}).then(function () {
+      return new Promise(function (res) { var n = 0; (function chk() { if (c.runId !== id || n++ > 40) return res(); setTimeout(chk, 150); })(); });
+    });
+  }
+  function sendMsg(c, text) {
+    var restart = c.live && (c.startMode !== c.mode || c.startCtx !== c.ctx);
+    return (restart ? endSession(c) : Promise.resolve())
+      .then(function () { return c.live ? c.runId : startSession(c, restart); })
+      .then(function (id) { c.busy = true; if (c.sync) c.sync(); return api("/api/run/" + id + "/stdin", "POST", { text: text }); })
+      .catch(function (e) { c.busy = false; addMsg(c, "err", e.message); if (c.sync) c.sync(); });
+  }
+  function reattach(c) {
+    if (c.checked) return; c.checked = true;
+    api("/api/runs").then(function (r) {
+      var run = r.runs.filter(function (x) { return x.kind === "session" && x.project === c.pid && !x.done; })[0];
+      if (run && !c.live) {
+        var m = run.meta || {};
+        c.mode = m.mode || c.mode; c.ctx = m.context || c.ctx; c.startMode = c.mode; c.startCtx = c.ctx;
+        attach(c, run.id);
+        if (c.selSync) c.selSync();
+      }
+    }).catch(function () {});
   }
   function chatPanel(pid) {
     var c = getChat(pid), wrap = el("div", { class: "tabbody", style: "gap:8px" });
+    reattach(c);
     var ps = pinfo[pid];
-    var psLine = el("div", { class: "sub", text: ps ? "project settings: mode " + (ps.defaultMode || "default") + ", " + ps.allow + " allow, " + ps.deny + " deny" + (ps.files.length ? "" : " (none found)") : "project settings: loading" });
-    if (!ps) api("/api/project?id=" + encodeURIComponent(pid)).then(function (r) { pinfo[pid] = r.settings; psLine.textContent = "project settings: mode " + (r.settings.defaultMode || "default") + ", " + r.settings.allow + " allow, " + r.settings.deny + " deny" + (r.settings.files.length ? "" : " (none found)"); }).catch(function () {});
+    function psText(s) { return "project settings: mode " + (s.defaultMode || "default") + ", " + s.allow + " allow, " + s.deny + " deny" + (s.files.length ? "" : " (none found)"); }
+    var psLine = el("div", { class: "sub", text: ps ? psText(ps) : "project settings: loading" });
+    if (!ps) api("/api/project?id=" + encodeURIComponent(pid)).then(function (r) { pinfo[pid] = r.settings; psLine.textContent = psText(r.settings); }).catch(function () {});
+    var status = el("span", { class: "tag", text: "no session" });
     var sel = el("select", { "aria-label": "Permission mode" }, [
       el("option", { value: "project", text: "Follow project settings" }),
       el("option", { value: "acceptEdits", text: "Accept edits" }),
       el("option", { value: "plan", text: "Plan only (read-only)" }),
       el("option", { value: "bypass", text: "Bypass ALL permissions", disabled: AV.allowBypass ? false : "disabled" })
     ]);
-    sel.value = c.mode || "project";
+    sel.value = c.mode;
     var banner = el("div", { class: "banner", text: "Bypass is on: Claude can run any command and edit any file in this project without asking.", hidden: "hidden" });
     function syncBanner() { banner.hidden = c.mode !== "bypass"; }
     sel.addEventListener("change", function () {
-      if (sel.value === "bypass" && !window.confirm("Bypass ALL permission checks for this project?\n\nClaude will run commands and edit files without asking. Use only in a project you trust.")) { sel.value = c.mode || "project"; return; }
-      c.mode = sel.value; syncBanner();
+      if (sel.value === "bypass" && !window.confirm("Bypass ALL permission checks for this project?\n\nClaude will run commands and edit files without asking. Use only in a project you trust.")) { sel.value = c.mode; return; }
+      c.mode = sel.value; syncBanner(); if (c.live) addMsg(c, "sys", "mode changes apply on your next message (the session restarts and resumes)");
     });
     syncBanner();
     if (!AV.allowBypass) sel.title = "Start the server with --allow-bypass to enable";
-    var ta = el("textarea", { rows: "3", placeholder: "Ask Claude about " + pid + " (Ctrl+Enter to send)", "aria-label": "Message" });
-    var send = el("button", { class: "btn", text: "Send" }), stop = el("button", { class: "btn ghost", text: "Stop", disabled: "disabled" });
-    var fresh = el("button", { class: "btn ghost sm", text: c.sid ? "New session" : "New session", onclick: function () { c.sid = ""; store("av.sid." + pid, ""); addMsg(c, "sys", "new session"); } });
-    function setBusy(b) { c.busy = b; send.disabled = b; stop.disabled = !b; }
-    setBusy(c.busy);
-    function go() {
-      var text = ta.value.trim(); if (!text || c.busy) return;
-      addMsg(c, "user", text); ta.value = ""; setBusy(true);
-      var feed = "";
-      api("/api/run", "POST", { kind: "chat", project: pid, prompt: text, mode: c.mode || "project", confirm_bypass: c.mode === "bypass", session_id: c.sid || undefined })
-        .then(function (r) {
-          c.runId = r.id;
-          streamRun(r.id, function (t) { feed += t; var i; while ((i = feed.indexOf("\n")) >= 0) { var line = feed.slice(0, i); feed = feed.slice(i + 1); if (line.trim()) chatEvent(c, line); } },
-            function (code) { if (feed.trim()) chatEvent(c, feed); if (code !== 0 && code !== null) addMsg(c, "err", "exited with code " + code); setBusy(false); c.runId = null; });
-        }).catch(function (e) { addMsg(c, "err", e.message); setBusy(false); });
-    }
+    var ctxSel = el("select", { "aria-label": "Context", title: "Full loads your global Claude settings, memory and hooks. Lean loads only this project's settings and costs roughly half per message." }, [
+      el("option", { value: "full", text: "Context: full" }), el("option", { value: "lean", text: "Context: lean (cheaper)" })
+    ]);
+    ctxSel.value = c.ctx;
+    ctxSel.addEventListener("change", function () { c.ctx = ctxSel.value; if (c.live) addMsg(c, "sys", "context change applies on your next message"); });
+    var ta = el("textarea", { rows: "3", placeholder: "Message Claude in " + pid + " (Ctrl+Enter to send)", "aria-label": "Message" });
+    var pre = store("av.prefill." + pid); if (pre) { ta.value = pre; store("av.prefill." + pid, ""); }
+    var send = el("button", { class: "btn", text: "Send" });
+    var endBtn = el("button", { class: "btn ghost", text: "End session" });
+    var fresh = el("button", { class: "btn ghost sm", text: "New session" });
+    c.selSync = function () { sel.value = c.mode; ctxSel.value = c.ctx; syncBanner(); };
+    c.sync = function () {
+      status.textContent = c.live ? (c.busy ? "working" : "session live") : "no session";
+      status.className = "tag" + (c.live ? " warn" : "");
+      send.disabled = c.busy; endBtn.disabled = !c.live;
+    };
+    function go() { var text = ta.value.trim(); if (!text || c.busy) return; ta.value = ""; sendMsg(c, text); }
     send.addEventListener("click", go);
-    stop.addEventListener("click", function () { if (c.runId) api("/api/run/" + c.runId + "/stop", "POST", {}); });
+    endBtn.addEventListener("click", function () { endSession(c); });
+    fresh.addEventListener("click", function () { endSession(c).then(function () { c.sid = ""; store("av.sid." + pid, ""); c.box.innerHTML = ""; addMsg(c, "sys", "new session: the next message starts fresh"); }); });
     ta.addEventListener("keydown", function (e) { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); go(); } });
-    if (!c.box.childNodes.length) addMsg(c, "sys", "Streams `claude -p` in " + pid + ". Sessions resume automatically.");
-    [psLine, el("div", { class: "row", style: "margin:0" }, [sel, fresh]), banner, c.box, ta, el("div", { class: "row", style: "margin:0" }, [send, stop])].forEach(function (x) { wrap.appendChild(x); });
+    if (!c.box.childNodes.length) addMsg(c, "sys", "A live Claude session for " + pid + ". It stays open between messages and keeps its context, like a terminal. Leave the tab and come back, it is still there until you end it.");
+    c.sync();
+    [el("div", { class: "row", style: "margin:0" }, [status, psLine]), el("div", { class: "row", style: "margin:0" }, [sel, ctxSel, fresh]), banner, c.box, ta, el("div", { class: "row", style: "margin:0" }, [send, endBtn])].forEach(function (x) { wrap.appendChild(x); });
     c.box.scrollTop = c.box.scrollHeight;
     return wrap;
   }
@@ -773,6 +835,43 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     }).catch(function (e) { st.textContent = "error: " + e.message; });
   }
 
+  function openNewProject() {
+    var names = projects.filter(function (p) { return !p.archived; }).map(function (p) { return p.id; });
+    showModal(function (d) {
+      d.appendChild(el("h2", { id: "mtitle", text: "New project" }));
+      var name = el("input", { type: "text", placeholder: "Project name (becomes the folder name)", "aria-label": "Project name", maxlength: "60" });
+      var goal = el("textarea", { rows: "3", placeholder: "Goal: what should this project achieve?", "aria-label": "Goal" });
+      var tasks = el("textarea", { rows: "5", placeholder: "Tasks, one per line", "aria-label": "Tasks" });
+      var checks = {}, rl = el("div", { class: "card", style: "max-height:180px;overflow:auto;margin:0" });
+      var filter = el("input", { type: "search", placeholder: "filter related projects", "aria-label": "Filter related projects" });
+      function drawRel() {
+        var q = filter.value.toLowerCase(); rl.innerHTML = "";
+        names.filter(function (n) { return !q || n.toLowerCase().indexOf(q) >= 0; }).forEach(function (n) {
+          var cb = el("input", { type: "checkbox" }); cb.checked = !!checks[n];
+          cb.addEventListener("change", function () { checks[n] = cb.checked; });
+          rl.appendChild(el("label", { class: "chk" }, [cb, n]));
+        });
+      }
+      filter.addEventListener("input", drawRel); drawRel();
+      var st = el("div", { class: "sub", text: "Creates the folder with Brief/, Deliverables/, Handover/, CLAUDE.md (goal, tasks, related projects) and architecture.md, then rescans." });
+      var create = el("button", { class: "btn", text: "Create project" });
+      create.addEventListener("click", function () {
+        var body = { name: name.value, goal: goal.value, tasks: tasks.value.split("\n"), related: names.filter(function (n) { return checks[n]; }) };
+        create.disabled = true; st.textContent = "creating";
+        api("/api/project/new", "POST", body).then(function (r) {
+          store("av.prefill." + r.id, "Read CLAUDE.md and Handover/Handover.md. Read the CLAUDE.md and architecture.md of each related project and check what they offer with the impact tool. Then propose a short plan for Task 1 and ask me anything unclear before you build.");
+          st.textContent = "created. Rescanning";
+          runInModal(d, { kind: "scan" }, "done. Opening the project.", function (code) {
+            if (code === 0) setTimeout(function () { location.hash = "open=" + encodeURIComponent(r.id) + "&tab=chat"; location.reload(); }, 600);
+          });
+        }).catch(function (e) { st.textContent = "failed: " + e.message; create.disabled = false; });
+      });
+      [el("label", { class: "lbl", text: "Name" }), name, el("label", { class: "lbl", text: "Goal" }), goal, el("label", { class: "lbl", text: "Tasks" }), tasks,
+       el("label", { class: "lbl", text: "Related projects it will use (optional)" }), filter, rl,
+       el("div", { class: "row" }, [create, el("button", { class: "btn ghost", text: "Cancel", onclick: closeModal })]), st].forEach(function (x) { d.appendChild(x); });
+    });
+  }
+
   function openSetup() {
     api("/api/state").then(function (s) {
       showModal(function (d) {
@@ -806,7 +905,8 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
 
   if (!AV) $("noserver").hidden = false;
   if (AV) {
-    $("b-rescan").hidden = false; $("b-setup").hidden = false;
+    $("b-rescan").hidden = false; $("b-setup").hidden = false; $("b-new").hidden = !!AV.readOnly;
+    $("b-new").addEventListener("click", openNewProject);
     $("b-rescan").addEventListener("click", rescan);
     $("b-setup").addEventListener("click", openSetup);
     api("/api/state").then(function (s) {
@@ -826,7 +926,11 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
 
   build();
   setMode("bd");
-  renderPanel();
+  (function openFromHash() {
+    var hm = /open=([^&]+)/.exec(location.hash || ""), tm = /tab=([a-z]+)/.exec(location.hash || "");
+    if (hm && AV) { var pid = decodeURIComponent(hm[1]); if (nodes[pid]) { tab = tm ? tm[1] : "info"; selectNode(pid, false); history.replaceState(null, "", location.pathname); return; } }
+    renderPanel();
+  })();
 })();
 </script>
 </body>

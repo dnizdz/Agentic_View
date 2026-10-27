@@ -104,6 +104,108 @@ def confine(pid, rel):
     return Path(real)
 
 
+
+SCAN_ROOT = Path(CFG["root"]).resolve()
+NAME_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9 ._&()+-]{0,58}[A-Za-z0-9)])?$")
+RESERVED = {"con", "prn", "aux", "nul"} | {f"com{i}" for i in range(1, 10)} | {f"lpt{i}" for i in range(1, 10)}
+
+
+def clean_line(x, n):
+    return re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", str(x)).replace("\r", "").strip()[:n]
+
+
+def new_project(b):
+    """Create a project folder with Goal, Tasks, Related projects, Handover and architecture stub."""
+    raw = str(b.get("name", ""))
+    name = raw.strip()
+    if raw != name:
+        return (400, "name must not start or end with a space")
+    if not NAME_RE.match(name) or name.lower() in RESERVED or name.lower() in {d.lower() for d in SKIP_DIRS}:
+        return (400, "bad name: use letters, digits, spaces and . _ & ( ) + - (1-60 chars)")
+    target = SCAN_ROOT / name
+    if os.path.exists(target) or name in graph()["projects"]:
+        return (409, "a project with this name already exists")
+    if os.path.realpath(target) != os.path.join(os.path.realpath(SCAN_ROOT), name):
+        return (400, "bad name")
+    goal = clean_line(b.get("goal", ""), 1500) or "TBD"
+    tasks = [clean_line(t, 300) for t in (b.get("tasks") or [])][:30]
+    tasks = [t for t in tasks if t]
+    known = graph()["projects"]
+    related = []
+    for r in (b.get("related") or [])[:25]:
+        r = str(r)
+        if r not in known or known[r].get("archived"):
+            return (400, f"unknown related project: {clean_line(r, 60)}")
+        related.append(r)
+    today = time.strftime("%Y-%m-%d")
+    impact = str(ROOT / "scanner" / "impact.py")
+    rel_md = "\n".join(f"- `{r}` - (what this project uses from it)" for r in related) or \
+        "None yet. Add one bullet per project, with the project name in backticks."
+    task_md = "\n".join(f"- [ ] {t}" for t in tasks) or "- [ ] (none yet)"
+    claude_md = f"""# {name}
+
+## Goal
+{goal}
+
+## Tasks
+{task_md}
+
+## Related projects
+Projects this one uses or depends on. Read their CLAUDE.md and architecture.md before building anything that touches them. The Agentic View scanner reads this list to draw the dependency.
+{rel_md}
+
+## Rules
+- Before changing shared code, check what depends on it: `python "{impact}" <file>`.
+- Keep Handover/Handover.md current: each pending item needs what, why, exact paths, files to read first, and the order of blocking items.
+- Keep architecture.md current when a module boundary or an external call changes.
+- Working material goes in Brief/YYYY-MM-DD Topic/. Final artifacts go in Deliverables/ with a date-prefixed name.
+"""
+    items = "\n".join(
+        f"### Task {i}: {t}\n- What: {t}\n- Why: serves the Goal in CLAUDE.md\n- Read first: CLAUDE.md" +
+        (", plus CLAUDE.md and architecture.md of each related project" if related else "") +
+        "\n- Files: not started (re-verify paths before editing; line numbers drift)\n- Blocked by: nothing recorded\n"
+        for i, t in enumerate(tasks, 1)) or "No tasks yet.\n"
+    handover = f"# Handover - {name}\n\nCreated {today}. Read CLAUDE.md first (goal, related projects).\n\n## Pending\n{items}"
+    arch = f"""# Architecture
+
+Update this file when a module boundary or an external call changes.
+
+## Overview
+{goal}. No code yet.
+
+## Entry points
+None yet.
+
+## Modules
+None yet.
+
+## Dependency graph (condensed)
+None yet.
+
+## External system boundaries
+None currently.{(' Planned related projects: ' + ', '.join(related) + '.') if related else ''}
+
+## Known gaps / TODO
+- Not built yet. Regenerate with the architecture-doc skill once code exists.
+
+## Last checked
+- {today}: created with the project, no code to check.
+"""
+    try:
+        for d in ("Brief", "Deliverables", "Handover"):
+            (target / d).mkdir(parents=True, exist_ok=False)
+        for rel, txt in (("CLAUDE.md", claude_md), ("Handover/Handover.md", handover), ("architecture.md", arch)):
+            with open(target / rel, "x", encoding="utf-8", newline="\n") as f:
+                f.write(txt)
+    except OSError as e:
+        import shutil as _sh
+        if target.exists():
+            _sh.rmtree(target, ignore_errors=True)
+        return (500, f"could not create project: {type(e).__name__}")
+    log(f"created project {name} ({len(tasks)} tasks, {len(related)} related)")
+    return {"id": name}
+
+
 # ------------------------------------------------------------------ claude
 def claude_bin():
     found = shutil.which("claude")
@@ -161,6 +263,8 @@ class Run:
         self.chunks, self.size, self.done, self.code = [], 0, False, None
         self.cond = threading.Condition()
         self.started = time.time()
+        self.project = None
+        self.meta = {}
         e = dict(os.environ)
         e.update({"PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"})
         e.update(env or {})
@@ -229,7 +333,7 @@ class Run:
 
     def info(self):
         return {"id": self.id, "kind": self.kind, "label": self.label, "done": self.done,
-                "code": self.code, "started": int(self.started)}
+                "code": self.code, "started": int(self.started), "project": self.project, "meta": self.meta}
 
 
 def start_run(*a, **kw):
@@ -482,11 +586,26 @@ class H(BaseHTTPRequestHandler):
                 return self._err(404, "unknown run")
             if m.group(2) == "stop":
                 r.stop()
-            else:
-                if r.kind != "login":
-                    return self._err(403, "stdin only for login runs")
+            elif r.kind == "login":
                 r.send(str(b.get("text", ""))[:4000])
+            elif r.kind == "session":
+                text = str(b.get("text", ""))
+                if not text.strip() or len(text) > 50000:
+                    return self._err(400, "empty or too long")
+                if r.done:
+                    return self._err(409, "session has ended")
+                r.send(json.dumps({"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": text}]}}) + "\n")
+            else:
+                return self._err(403, "stdin not accepted for this run")
             return self._send(200, {"ok": True})
+
+        if p == "/api/project/new":
+            if S["read_only"]:
+                return self._err(403, "server is read-only")
+            r = new_project(b)
+            if isinstance(r, tuple):
+                return self._err(*r)
+            return self._send(200, r)
 
         if p != "/api/run":
             return self._err(404, "not found")
@@ -495,6 +614,8 @@ class H(BaseHTTPRequestHandler):
             r = start_run("scan", "rescan", [sys.executable, "-I", str(ROOT / "scanner" / "scan.py")], ROOT)
         elif kind == "chat":
             r = self._start_chat(b)
+        elif kind == "session":
+            r = self._start_chat(b, persistent=True)
         elif kind == "script":
             r = self._start_script(b)
         elif kind == "login":
@@ -515,16 +636,18 @@ class H(BaseHTTPRequestHandler):
             return self._err(*r)
         return self._send(200, r.info())
 
-    def _start_chat(self, b):
+    def _start_chat(self, b, persistent=False):
         cb = claude_bin()
         if not cb:
             return (400, "claude not installed")
         base = project_dir(b.get("project", ""))
         prompt = b.get("prompt", "")
-        if not base or not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 50000:
+        if not base or not isinstance(prompt, str) or len(prompt) > 50000 or (not persistent and not prompt.strip()):
             return (400, "bad project or prompt")
         mode = b.get("mode", "project")
         argv = [cb, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
+        if persistent:
+            argv += ["--input-format", "stream-json", "--replay-user-messages"]
         if S["read_only"] and mode != "plan":
             return (403, "server is read-only: only plan mode is allowed")
         if mode in ("acceptEdits", "plan"):
@@ -537,6 +660,11 @@ class H(BaseHTTPRequestHandler):
             argv.append("--dangerously-skip-permissions")
         elif mode != "project":
             return (400, "unknown mode")
+        ctx = b.get("context", "full")
+        if ctx == "lean":
+            argv += ["--setting-sources", "project,local"]
+        elif ctx != "full":
+            return (400, "unknown context")
         sid = b.get("session_id")
         if sid:
             if not SID_RE.match(str(sid)):
@@ -547,6 +675,13 @@ class H(BaseHTTPRequestHandler):
             if not MODEL_RE.match(str(model)):
                 return (400, "bad model")
             argv += ["--model", str(model)]
+        if persistent:
+            if sum(1 for r in S["runs"].values() if r.kind == "session" and not r.done) >= 6:
+                return (429, "too many live sessions: end one first")
+            r = start_run("session", f"{b['project']} [{mode}]", argv, base, keep_stdin=True)
+            r.project = b["project"]
+            r.meta = {"mode": mode, "context": ctx}
+            return r
         return start_run("chat", f"{b['project']} [{mode}]", argv, base, stdin_text=prompt)
 
     def _start_script(self, b):

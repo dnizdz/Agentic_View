@@ -307,6 +307,7 @@ def scan(cfg, roots, use_cache=True):
     proj_of = {}
     facts = {}      # node id -> parsed facts
     docs = {}       # project -> claude.md summary
+    declared = {}   # project -> names listed under "## Related projects" in its CLAUDE.md
 
     for pid, p in projects.items():
         nodes[pid] = {"id": pid, "type": "project", "label": pid.split("/")[-1],
@@ -329,6 +330,7 @@ def scan(cfg, roots, use_cache=True):
             if name == "CLAUDE.md" and len(ap.relative_to(projects[pid]["path"]).parts) == 1:
                 txt = read_text(ap, cfg["max_text_bytes"]) or ""
                 docs[pid] = summarize_md(txt)
+                declared[pid] = parse_related(txt)
                 continue
             if name in ("CLAUDE.md", "appsscript.json"):
                 continue
@@ -514,6 +516,13 @@ def scan(cfg, roots, use_cache=True):
                 nodes[tid] = {"id": tid, "type": "target", "label": e, "tkind": "env", "project": ""}
             add_edge(fid, tid, "uses_target", node["path"], "exact")
 
+    # declared dependencies (project CLAUDE.md "## Related projects")
+    for pid, names in declared.items():
+        for nm in names:
+            for tp in list(pname_to_pid.get(nm, [])) + ([nm] if nm in projects else []):
+                if tp != pid:
+                    add_edge(pid, tp, "declared", "CLAUDE.md", "exact")
+
     # function nodes and call edges (python, non-archived)
     file_funcs = {}
     for fid, fact in facts.items():
@@ -660,6 +669,12 @@ def scan(cfg, roots, use_cache=True):
     return graph
 
 
+def parse_related(txt):
+    """Backticked names under a "## Related projects" heading (a project's declared needs)."""
+    m = re.search(r"^##\s+Related projects\s*$(.*?)(?=^##\s|\Z)", txt, re.S | re.M)
+    return sorted(set(re.findall(r"`([^`\n]+)`", m.group(1)))) if m else []
+
+
 def summarize_md(txt):
     for para in re.split(r"\n\s*\n", txt):
         p = para.strip()
@@ -737,7 +752,7 @@ def build_impact(graph):
     targets = defaultdict(set)
     jobs_of = defaultdict(set)
     for e in graph["edges"]:
-        if e["kind"] in ("imports", "runs", "reads_file", "calls"):
+        if e["kind"] in ("imports", "runs", "reads_file", "calls", "declared"):
             if nodes.get(e["from"], {}).get("type") == "job":
                 jobs_of[e["to"]].add(e["from"])
             else:
