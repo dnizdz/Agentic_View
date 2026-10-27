@@ -138,6 +138,9 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
 .tabs .sp { flex: 1; }
 .tabs select { width: auto; max-width: 220px; min-height: 28px; align-self: center; padding: 3px 8px; }
 .tabs .btn { align-self: center; margin-left: 4px; }
+.tabs .btn, .tabs select { box-sizing: border-box; height: 30px; min-height: 30px; padding-top: 0; padding-bottom: 0; font-size: 12px; line-height: 1; }
+.tabs .btn.back { margin: 0 8px 0 0; background: #3b82f6; color: #fff; font-weight: 600; }
+.tabs .btn.back:hover { background: #2563eb; }
 /* jobs */
 .job { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; padding: 8px 10px; margin: 0 0 8px; }
 .job.off { border-left-color: var(--text-dim); opacity: .8; }
@@ -560,7 +563,8 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
         sw.addEventListener("change", function () { selectNode(sw.value, false); });
         tabs.appendChild(sw);
       }
-      tabs.appendChild(el("button", { class: "btn ghost sm", text: wide ? "Back to map" : "Full width", title: wide ? "Show the map and project list again" : "Use the whole window for this project", onclick: function () { setWide(!wide); renderPanel(); cy.resize(); window.dispatchEvent(new Event("resize")); } }));
+      var wideBtn = el("button", { class: wide ? "btn sm back" : "btn ghost sm", text: wide ? "< Back to map" : "Full width", title: wide ? "Show the map and project list again" : "Use the whole window for this project", onclick: function () { setWide(!wide); renderPanel(); cy.resize(); window.dispatchEvent(new Event("resize")); } });
+      if (wide) tabs.insertBefore(wideBtn, tabs.firstChild); else tabs.appendChild(wideBtn);
       d.appendChild(tabs);
     } else tab = "info";
     var body = el("div", { class: "tabbody" });
