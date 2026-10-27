@@ -31,8 +31,12 @@ header h1 span { color: var(--accent); }
 .seg button { background: none; border: 0; padding: 4px 12px; min-height: 30px; color: var(--text-dim); }
 .seg button[aria-pressed=true] { background: var(--muted); color: var(--text); }
 header .btn, .seg button { box-sizing: border-box; height: 32px; min-height: 32px; padding: 0 14px; font-size: 12px; line-height: 1; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; }
-header .btn { width: 124px; flex: none; }
-.seg button { min-width: 56px; }
+header .btn[hidden] { display: none; }
+header .btn { width: 124px; flex: 0 1 124px; min-width: 96px; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; }
+.seg { flex: none; }
+.seg button { min-width: 56px; flex: none; }
+header h1 { flex: none; white-space: nowrap; }
+.stats { min-width: 0; flex: 0 1 auto; overflow: hidden; }
 aside, section.detail { background: var(--panel); overflow: auto; padding: 12px; }
 aside { border-right: 1px solid var(--border); }
 section.detail { border-left: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
