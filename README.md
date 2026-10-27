@@ -2,6 +2,14 @@
 
 Scan a folder of projects and see how they connect. Agentic View builds a dependency map (imports, function calls, scripts that run other scripts, projects that read each other's files, shared external systems) and lets you manage those projects from one page.
 
+## Why
+Each project has its own focus and its own tasks, so an agent working on one should not load the others. Agentic View keeps agents small to cut token usage:
+
+- The map shows which projects, files and functions are related, so an agent reads only what the task touches instead of the whole folder.
+- `impact.py` and `out/INDEX.md` answer "what depends on this?" without opening code.
+- Chat runs one live session per project, scoped to that project's folder and `CLAUDE.md`, with a lean context option that skips global settings and memory.
+
+## What it does
 - **Board:** a kanban-style view, one column per project, with cards for the projects and external systems it uses and the projects that use it.
 - **Map:** interactive 2D graph (project, then file, then function) and a 3D view, with impact highlighting.
 - **For agents:** `impact.py` answers "what depends on this file?", plus `out/graph.json`, `out/impact.json` and `out/INDEX.md`.
