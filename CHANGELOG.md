@@ -2,6 +2,10 @@
 
 Versions follow semantic versioning. The current version is in the `VERSION` file and is shown in the page header. Each release is a git tag `vX.Y.Z`.
 
+## 1.5.1 - 2026-10-27
+### Changed
+- README: screenshots of the board, 2D map and 3D map use a made-up set of eight demo projects instead of a blurred real one.
+
 ## 1.5.0 - 2026-10-27
 ### Added
 - The launchers ask how much the app may do before it opens: 1 Read only, 2 Allow edit (default, press Enter), 3 Allow bypass (needs a typed YES). The choice is kept across update restarts. Passing `--read-only`, `--allow-edit` or `--allow-bypass` skips the question; with no terminal it starts in Allow edit.
