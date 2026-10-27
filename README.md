@@ -2,7 +2,13 @@
 
 Scan a folder of projects and see how they connect. Agentic View builds a dependency map (imports, function calls, scripts that run other scripts, projects that read each other's files, shared external systems) and lets you manage those projects from one page.
 
-![Board view, project and host names blurred](docs/board.png)
+![Board view of a demo set of projects](docs/board.png)
+
+| 2D map | 3D map |
+|---|---|
+| ![2D map of a demo set of projects](docs/map-2d.png) | ![3D map of a demo set of projects](docs/map-3d.png) |
+
+Screenshots use a made-up set of eight demo projects.
 
 ## Why
 Each project has its own focus and its own tasks, so an agent working on one should not load the others. Agentic View keeps agents small to cut token usage:
