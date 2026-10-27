@@ -237,11 +237,41 @@ def parse_python(text, fpath, with_symbols):
         elif isinstance(node, ast.Constant) and isinstance(node.value, str) and 4 <= len(node.value) <= 80:
             out["strings"].append(node.value)
     if with_symbols:
+        aliases = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for a in node.names:
+                    local = a.asname or a.name.split(".")[0]
+                    aliases[local] = {"mod": a.name if a.asname else local, "name": None, "level": 0}
+            elif isinstance(node, ast.ImportFrom):
+                for a in node.names:
+                    aliases[a.asname or a.name] = {"mod": node.module or "", "name": a.name, "level": node.level}
+        funcs, top_other = {}, []
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 out["symbols"].append(node.name)
+                funcs[node.name] = {"line": node.lineno, "calls": collect_calls([node])}
+            else:
+                top_other.append(node)
+        out["aliases"] = aliases
+        out["funcs"] = dict(list(funcs.items())[:400])
+        out["module_calls"] = collect_calls(top_other)
     out["symbols"] = out["symbols"][:60]
     return out
+
+
+def collect_calls(nodes):
+    """Distinct call shapes in the given AST nodes: ["n", name, ""] or ["a", base, attr]."""
+    calls = set()
+    for top in nodes:
+        for n in ast.walk(top):
+            if isinstance(n, ast.Call):
+                f = n.func
+                if isinstance(f, ast.Name):
+                    calls.add(("n", f.id, ""))
+                elif isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name):
+                    calls.add(("a", f.value.id, f.attr))
+    return [list(c) for c in sorted(calls)][:60]
 
 
 JS_IMPORT_RE = re.compile(r"""(?:import\s+(?:[^'"]*?\s+from\s+)?|require\s*\(\s*|import\s*\(\s*)["']([^'"]+)["']""")
@@ -317,7 +347,7 @@ def scan(cfg, roots, use_cache=True):
                           "size": st.st_size, "mtime": int(st.st_mtime)}
             abs_index[norm(ap)] = fid
             proj_of[fid] = pid
-            key = f"{fid}|{int(st.st_mtime)}|{st.st_size}|{int(f['archived'])}"
+            key = f"v2|{fid}|{int(st.st_mtime)}|{st.st_size}|{int(f['archived'])}"
             if key in cache:
                 facts[fid] = cache[key]
                 new_cache[key] = cache[key]
@@ -484,6 +514,72 @@ def scan(cfg, roots, use_cache=True):
                 nodes[tid] = {"id": tid, "type": "target", "label": e, "tkind": "env", "project": ""}
             add_edge(fid, tid, "uses_target", node["path"], "exact")
 
+    # function nodes and call edges (python, non-archived)
+    file_funcs = {}
+    for fid, fact in facts.items():
+        fns = fact.get("funcs") or {}
+        if not fns:
+            continue
+        file_funcs[fid] = set(fns)
+        for name, info in fns.items():
+            nodes[f"{fid}::{name}"] = {"id": f"{fid}::{name}", "type": "function", "label": name,
+                                       "project": nodes[fid]["project"], "file": fid, "line": info["line"]}
+
+    def alias_target(fact, fdir, proot, alias, symbol):
+        """Return (target file id, confidence) for alias.symbol, or None."""
+        bases = []
+        if alias["level"] > 0:
+            b = fdir
+            for _ in range(alias["level"] - 1):
+                b = os.path.dirname(b)
+            bases.append((b, "exact"))
+        else:
+            bases.append((fdir, "exact"))
+            bases += [(sp["dir"], "resolved") for sp in fact.get("sys_path", [])]
+            cur = os.path.dirname(fdir)
+            while norm(cur).startswith(norm(proot)):
+                bases.append((cur, "heuristic"))
+                if norm(cur) == norm(proot):
+                    break
+                cur = os.path.dirname(cur)
+        for b, conf in bases:
+            if symbol is None:                      # alias is a module: import m / from x import m
+                names = [alias["name"]] if alias["name"] else []
+                hits = resolve_mod(b, alias["mod"], names)
+                hits = hits[-1:] if names else hits
+            else:                                   # from m import symbol
+                hits = resolve_mod(b, alias["mod"], []) if alias["mod"] else []
+            if hits:
+                tf = lookup(hits[0])
+                if tf:
+                    return tf, conf
+        return None
+
+    for fid, fact in facts.items():
+        if fid not in file_funcs and not fact.get("module_calls"):
+            continue
+        ap = Path(projects[nodes[fid]["project"]]["path"]) / nodes[fid]["path"]
+        fdir, proot = str(ap.parent), str(projects[nodes[fid]["project"]]["path"])
+        aliases = fact.get("aliases", {})
+        callers = [(f"{fid}::{n}", i["calls"]) for n, i in (fact.get("funcs") or {}).items()]
+        callers.append((fid, fact.get("module_calls", [])))
+        for caller, calls in callers:
+            for kind, a, b in calls:
+                target, conf = None, "exact"
+                if kind == "n":
+                    if a in file_funcs.get(fid, ()):
+                        target = f"{fid}::{a}"
+                    elif a in aliases and aliases[a]["name"]:
+                        r = alias_target(fact, fdir, proot, aliases[a], aliases[a]["name"])
+                        if r and aliases[a]["name"] in file_funcs.get(r[0], ()):
+                            target, conf = f"{r[0]}::{aliases[a]['name']}", r[1]
+                elif a in aliases:
+                    r = alias_target(fact, fdir, proot, aliases[a], None)
+                    if r and b in file_funcs.get(r[0], ()):
+                        target, conf = f"{r[0]}::{b}", r[1]
+                if target and target != caller:
+                    add_edge(caller, target, "calls", nodes[fid]["path"], conf)
+
     # cross-project path references (no import needed)
     names = [n for n in pname_to_pid if len(n) >= 4]
     if names:
@@ -547,6 +643,7 @@ def scan(cfg, roots, use_cache=True):
         "generated": time.strftime("%Y-%m-%d %H:%M:%S"),
         "projects": len(projects),
         "files": sum(1 for n in nodes.values() if n["type"] == "file"),
+        "functions": sum(1 for n in nodes.values() if n["type"] == "function"),
         "targets": sum(1 for n in nodes.values() if n["type"] == "target"),
         "edges": len(edges),
         "include_archive": cfg["include_archive"],
@@ -640,7 +737,7 @@ def build_impact(graph):
     targets = defaultdict(set)
     jobs_of = defaultdict(set)
     for e in graph["edges"]:
-        if e["kind"] in ("imports", "runs", "reads_file"):
+        if e["kind"] in ("imports", "runs", "reads_file", "calls"):
             if nodes.get(e["from"], {}).get("type") == "job":
                 jobs_of[e["to"]].add(e["from"])
             else:
@@ -649,7 +746,7 @@ def build_impact(graph):
             targets[e["from"]].add(e["to"])
     impact = {}
     for nid, n in nodes.items():
-        if n["type"] not in ("file", "project"):
+        if n["type"] not in ("file", "project", "function"):
             continue
         direct = sorted(rev.get(nid, ()))
         seen, dq = set(), deque(direct)
@@ -660,7 +757,7 @@ def build_impact(graph):
             seen.add(cur)
             dq.extend(rev.get(cur, ()))
         trans = sorted(seen)
-        file_dep = [x for x in trans if nodes.get(x, {}).get("type") == "file"]
+        file_dep = [x for x in trans if nodes.get(x, {}).get("type") in ("file", "function")]
         projs = sorted({nodes[x]["project"] for x in trans if x in nodes and nodes[x]["project"]} - {n["project"]})
         jobs = set()
         for x in [nid] + trans:

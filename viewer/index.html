@@ -11,31 +11,36 @@
 :root {
   --bg: #0b1220; --panel: #0f172a; --card: #1b2336; --muted: #272f42;
   --border: #334155; --text: #f8fafc; --text-dim: #94a3b8;
-  --accent: #22c55e; --imports: #60a5fa; --reads: #fbbf24; --runs: #22c55e; --target: #c084fc;
-  --danger: #ef4444;
+  --accent: #22c55e; --imports: #60a5fa; --reads: #fbbf24; --runs: #22c55e; --target: #c084fc; --calls: #f472b6;
+  --danger: #ef4444; --warn: #fbbf24;
   --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
   --sans: "IBM Plex Sans", system-ui, Segoe UI, sans-serif;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font: 400 14px/1.5 var(--sans); }
-button, input { font: inherit; color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.app { display: grid; grid-template-columns: 280px 1fr 360px; grid-template-rows: 48px 1fr; height: 100%; }
-header { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; padding: 0 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.app { display: grid; grid-template-columns: 280px 1fr 440px; grid-template-rows: 48px 1fr; height: 100%; }
+header { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
 header h1 { margin: 0; font: 600 15px var(--mono); letter-spacing: .02em; }
 header h1 span { color: var(--accent); }
 .stats { display: flex; gap: 14px; color: var(--text-dim); font: 400 12px var(--mono); margin-left: auto; flex-wrap: wrap; }
 .stats b { color: var(--text); font-weight: 500; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.seg button { background: none; border: 0; padding: 4px 12px; min-height: 30px; color: var(--text-dim); }
+.seg button[aria-pressed=true] { background: var(--muted); color: var(--text); }
 aside, section.detail { background: var(--panel); overflow: auto; padding: 12px; }
 aside { border-right: 1px solid var(--border); }
-section.detail { border-left: 1px solid var(--border); }
-#cy { background: radial-gradient(circle at 50% 40%, #111a2e 0%, var(--bg) 70%); min-height: 0; }
+section.detail { border-left: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+#viewport { position: relative; min-height: 0; }
+#cy, #g3d { position: absolute; inset: 0; }
+#cy { background: radial-gradient(circle at 50% 40%, #111a2e 0%, var(--bg) 70%); }
+#g3d { display: none; }
 label.lbl { display: block; font: 500 11px var(--mono); color: var(--text-dim); text-transform: uppercase; letter-spacing: .08em; margin: 14px 0 6px; }
-input[type=search] { width: 100%; padding: 8px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; }
+input[type=search], input[type=text], select, textarea { width: 100%; padding: 8px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; }
 .chk { display: flex; align-items: center; gap: 8px; padding: 5px 0; min-height: 32px; cursor: pointer; }
 .chk input { accent-color: var(--accent); width: 16px; height: 16px; }
-.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .plist { list-style: none; margin: 0; padding: 0; }
 .plist li button { width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 6px 8px; min-height: 32px; display: flex; justify-content: space-between; gap: 8px; color: var(--text); }
 .plist li button:hover { background: var(--muted); }
@@ -52,18 +57,45 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
 .card li button { background: none; border: 0; padding: 2px 0; text-align: left; color: var(--text); }
 .card li button:hover { color: var(--accent); text-decoration: underline; }
 .tag { font: 500 10px var(--mono); padding: 1px 6px; border-radius: 99px; border: 1px solid var(--border); color: var(--text-dim); margin-left: 6px; }
-.tag.warn { color: var(--reads); border-color: var(--reads); }
-.btn { background: var(--accent); color: #052e16; border: 0; border-radius: 6px; padding: 8px 12px; font-weight: 600; min-height: 36px; }
-.btn.ghost { background: var(--muted); color: var(--text); }
+.tag.warn { color: var(--warn); border-color: var(--warn); }
+.btn { background: var(--accent); color: #052e16; border: 0; border-radius: 6px; padding: 7px 12px; font-weight: 600; min-height: 34px; }
+.btn.ghost { background: var(--muted); color: var(--text); font-weight: 500; }
+.btn.danger { background: var(--danger); color: #fff; }
+.btn.sm { min-height: 28px; padding: 3px 10px; font-size: 12px; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
-.row { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; align-items: center; }
 .empty { max-width: 560px; margin: 12vh auto; padding: 24px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; }
-.empty code { font-family: var(--mono); background: var(--muted); padding: 2px 6px; border-radius: 4px; }
-.legend { position: absolute; left: 292px; bottom: 12px; display: flex; gap: 12px; flex-wrap: wrap; background: rgba(15,23,42,.85); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font: 400 11px var(--mono); color: var(--text-dim); }
+.empty code, code.k { font-family: var(--mono); background: var(--muted); padding: 2px 6px; border-radius: 4px; }
+.legend { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 12px; flex-wrap: wrap; background: rgba(15,23,42,.85); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font: 400 11px var(--mono); color: var(--text-dim); z-index: 2; }
 .legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 4px; }
-.toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--card); border: 1px solid var(--accent); padding: 8px 14px; border-radius: 8px; font: 400 12px var(--mono); opacity: 0; pointer-events: none; transition: opacity .2s; }
+.toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--card); border: 1px solid var(--accent); padding: 8px 14px; border-radius: 8px; font: 400 12px var(--mono); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 50; max-width: 80vw; }
 .toast.on { opacity: 1; }
-@media (max-width: 1000px) { .app { grid-template-columns: 1fr; grid-template-rows: 48px 40vh 1fr auto; } aside, section.detail { max-height: 30vh; } .legend { left: 12px; } }
+/* tabs */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin: -12px -12px 10px; padding: 0 8px; flex: none; }
+.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 12px; color: var(--text-dim); min-height: 40px; }
+.tabs button[aria-selected=true] { color: var(--text); border-bottom-color: var(--accent); }
+.tabbody { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+/* terminal-style output */
+.term { background: #070c17; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: 400 12px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; overflow: auto; }
+.chatbox { flex: 1; min-height: 160px; }
+.msg { margin: 6px 0; }
+.msg.user { color: var(--accent); }
+.msg.user::before { content: "> "; }
+.msg.asst { color: var(--text); font-family: var(--sans); font-size: 13px; }
+.msg.sys { color: var(--text-dim); }
+.msg.err { color: var(--danger); }
+.tool { margin: 6px 0; border-left: 2px solid var(--calls); padding-left: 8px; color: var(--text-dim); }
+.tool b { color: var(--calls); font-weight: 500; }
+.tool details { margin-top: 2px; }
+.tool pre { margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow: auto; }
+.banner { background: rgba(239,68,68,.15); border: 1px solid var(--danger); color: #fecaca; border-radius: 8px; padding: 6px 10px; margin: 6px 0; font-size: 12px; }
+.ed { width: 100%; flex: 1; min-height: 240px; font: 400 12px/1.5 var(--mono); resize: none; white-space: pre; tab-size: 4; }
+.modal { position: fixed; inset: 0; background: rgba(2,6,23,.7); display: none; align-items: center; justify-content: center; z-index: 40; padding: 16px; }
+.modal.on { display: flex; }
+.dlg { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; width: min(640px, 100%); max-height: 90vh; overflow: auto; padding: 18px; }
+.dlg h2 { font-size: 16px; margin-bottom: 10px; }
+.ok { color: var(--accent); } .bad { color: var(--danger); }
+@media (max-width: 1000px) { .app { grid-template-columns: 1fr; grid-template-rows: 48px 40vh 1fr auto; } aside, section.detail { max-height: 40vh; } .legend { left: 12px; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
@@ -71,11 +103,14 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
 <div class="app" id="app">
   <header>
     <h1>agentic<span>_</span>view</h1>
+    <div class="seg" role="group" aria-label="View mode"><button id="v2d" aria-pressed="true">2D</button><button id="v3d" aria-pressed="false">3D</button></div>
+    <button class="btn ghost sm" id="b-rescan" hidden>Rescan</button>
+    <button class="btn ghost sm" id="b-setup" hidden>Claude setup</button>
     <div class="stats" id="stats" aria-live="polite"></div>
   </header>
   <aside aria-label="Filters and projects">
     <label class="lbl" for="q">Search</label>
-    <input id="q" type="search" placeholder="project, file, target" autocomplete="off">
+    <input id="q" type="search" placeholder="project, file, function, target" autocomplete="off">
     <label class="lbl">Show</label>
     <label class="chk"><input type="checkbox" id="f-shared" checked> Shared targets only</label>
     <label class="chk"><input type="checkbox" id="f-env"> Env key names</label>
@@ -85,9 +120,12 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     <label class="lbl">Projects</label>
     <ul class="plist" id="plist"></ul>
   </aside>
-  <main style="position:relative;min-height:0"><div id="cy" style="position:absolute;inset:0" role="img" aria-label="Dependency graph of projects"></div>
+  <main id="viewport">
+    <div id="cy" role="img" aria-label="Dependency graph of projects"></div>
+    <div id="g3d" role="img" aria-label="3D dependency graph"></div>
     <div class="legend" aria-hidden="true">
       <span><i style="border-color:var(--imports)"></i>imports</span>
+      <span><i style="border-color:var(--calls)"></i>calls</span>
       <span><i style="border-color:var(--reads)"></i>reads files</span>
       <span><i style="border-color:var(--runs)"></i>runs</span>
       <span><i style="border-color:var(--target)"></i>uses target</span>
@@ -97,9 +135,12 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
   <section class="detail" id="detail" aria-label="Details"></section>
 </div>
 <div class="toast" id="toast" role="status"></div>
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="mtitle"><div class="dlg" id="dlg"></div></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
+<!--AV_BOOT-->
 <script src="../out/graph.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
+<script src="https://unpkg.com/3d-force-graph@1.73.4/dist/3d-force-graph.min.js"></script>
 <script>
 (function () {
   "use strict";
@@ -110,18 +151,20 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       if (k === "text") e.textContent = props[k];
       else if (k === "class") e.className = props[k];
       else if (k.indexOf("on") === 0) e.addEventListener(k.slice(2), props[k]);
-      else e.setAttribute(k, props[k]);
+      else if (props[k] !== false && props[k] !== null && props[k] !== undefined) e.setAttribute(k, props[k]);
     });
     (kids || []).forEach(function (c) { if (c) e.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
     return e;
   }
-  function toast(msg) { var t = $("toast"); t.textContent = msg; t.classList.add("on"); setTimeout(function () { t.classList.remove("on"); }, 1800); }
+  function toast(msg) { var t = $("toast"); t.textContent = msg; t.classList.add("on"); setTimeout(function () { t.classList.remove("on"); }, 2400); }
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
 
+  var AV = window.AV || null;            // present only when served by server/server.py
   var G = window.AGENTIC_GRAPH, IMP = window.AGENTIC_IMPACT || {};
   if (!G || typeof cytoscape === "undefined") {
-    var d = $("detail"); d.style.display = "none";
+    $("detail").style.display = "none";
     document.querySelector("aside").style.display = "none";
-    $("cy").replaceWith(el("div", { class: "empty" }, [
+    $("viewport").replaceWith(el("div", { class: "empty" }, [
       el("h2", { text: "No scan data yet" }),
       el("p", { text: G ? "Cytoscape failed to load (check your connection)." : "Run the scanner, then reload this page:" }),
       G ? null : el("p", {}, [el("code", { text: "python scanner/scan.py --root <your projects folder>" })])
@@ -129,18 +172,53 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     return;
   }
 
+  /* ---------------------------------------------------------- api helpers */
+  function hdr(json) { var h = { "X-AV-Token": AV.token }; if (json) h["Content-Type"] = "application/json"; return h; }
+  function api(path, method, body) {
+    return fetch(path, { method: method || "GET", headers: hdr(!!body), body: body ? JSON.stringify(body) : undefined })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); });
+  }
+  function streamRun(id, onText, onEnd) {
+    fetch("/api/run/" + id + "/stream?from=0", { headers: hdr() }).then(function (res) {
+      var reader = res.body.getReader(), dec = new TextDecoder(), buf = "";
+      function pump() {
+        return reader.read().then(function (r) {
+          if (r.done) { onEnd(null); return; }
+          buf += dec.decode(r.value, { stream: true });
+          var i;
+          while ((i = buf.indexOf("\n\n")) >= 0) {
+            var ev = buf.slice(0, i); buf = buf.slice(i + 2);
+            var name = "message", data = "";
+            ev.split("\n").forEach(function (l) { if (l.indexOf("event: ") === 0) name = l.slice(7); else if (l.indexOf("data: ") === 0) data += l.slice(6); });
+            if (!data) continue;
+            var o = JSON.parse(data);
+            if (name === "end") { onEnd(o.code); return; }
+            onText(o.t);
+          }
+          return pump();
+        });
+      }
+      return pump();
+    }).catch(function (e) { onEnd("stream error: " + e.message); });
+  }
+
+  /* ---------------------------------------------------------- graph data */
   var nodes = {}; G.nodes.forEach(function (n) { nodes[n.id] = n; });
   var projects = G.nodes.filter(function (n) { return n.type === "project"; }).sort(function (a, b) { return a.id.toLowerCase() < b.id.toLowerCase() ? -1 : 1; });
   var hyg = {}; G.hygiene.forEach(function (h) { hyg[h.project] = h.issues; });
-  var filesOf = {}; G.nodes.forEach(function (n) { if (n.type === "file") (filesOf[n.project] = filesOf[n.project] || []).push(n); });
-  var expanded = {}, selected = null;
+  var filesOf = {}, funcsOf = {};
+  G.nodes.forEach(function (n) {
+    if (n.type === "file") (filesOf[n.project] = filesOf[n.project] || []).push(n);
+    else if (n.type === "function") (funcsOf[n.file] = funcsOf[n.file] || []).push(n);
+  });
+  var linked = {}; G.edges.forEach(function (e) { linked[e.from] = linked[e.to] = 1; });
+  var expanded = {}, expandedFiles = {}, selected = null, tab = "info", view3d = false;
   var m = G.meta;
-  $("stats").innerHTML = "";
-  [["projects", m.projects], ["files", m.files], ["targets", m.targets], ["edges", m.edges], ["scanned", m.generated]].forEach(function (s) {
+  [["projects", m.projects], ["files", m.files], ["functions", m.functions || 0], ["targets", m.targets], ["edges", m.edges], ["scanned", m.generated]].forEach(function (s) {
     $("stats").appendChild(el("span", {}, [s[0] + " ", el("b", { text: String(s[1]) })]));
   });
 
-  var KCOL = { imports: "#60a5fa", reads_file: "#fbbf24", runs: "#22c55e", uses_target: "#c084fc" };
+  var KCOL = { imports: "#60a5fa", reads_file: "#fbbf24", runs: "#22c55e", uses_target: "#c084fc", calls: "#f472b6" };
   var cy = cytoscape({
     container: $("cy"), wheelSensitivity: 0.25, minZoom: 0.05, maxZoom: 4,
     style: [
@@ -151,6 +229,8 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       { selector: "node[type='file']", style: { shape: "ellipse", width: 12, height: 12, "background-color": "#60a5fa", "font-size": 9, "text-max-width": 90 } },
       { selector: "node[type='file'][lang='shell']", style: { "background-color": "#22c55e" } },
       { selector: "node[type='file'][lang='js'], node[type='file'][lang='ts'], node[type='file'][lang='appsscript']", style: { "background-color": "#fbbf24" } },
+      { selector: "node[type='file'][?open]", style: { width: 20, height: 20, "border-width": 2, "border-color": "#f8fafc", "font-size": 10, "font-weight": 600 } },
+      { selector: "node[type='function']", style: { shape: "triangle", width: 10, height: 10, "background-color": "#f472b6", "font-size": 8, "text-max-width": 80, "min-zoomed-font-size": 6 } },
       { selector: "node[type='target']", style: { shape: "diamond", width: 22, height: 22, "background-color": "#c084fc", "font-size": 10, color: "#d8b4fe", "text-outline-color": "#0b1220", "text-outline-width": 2, "min-zoomed-font-size": 9 } },
       { selector: "node[type='job']", style: { shape: "hexagon", width: 20, height: 20, "background-color": "#22c55e", "font-size": 10 } },
       { selector: "edge", style: { width: "mapData(count, 1, 40, 1, 5)", "line-color": "data(color)", "target-arrow-color": "data(color)", "target-arrow-shape": "triangle", "curve-style": "bezier", opacity: 0.6, "arrow-scale": 0.8 } },
@@ -165,27 +245,30 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
 
   function rep(id) {
     var n = nodes[id]; if (!n) return null;
+    if (n.type === "function") {
+      if (!expanded[n.project]) return n.project;
+      return expandedFiles[n.file] ? id : n.file;
+    }
     if (n.type === "file") return expanded[n.project] ? id : n.project;
     return id;
   }
-  function sharedTargets() {
-    var users = {};
-    G.edges.forEach(function (e) {
-      var t = nodes[e.to], f = nodes[e.from];
-      if (t && t.type === "target" && f && f.project) (users[t.id] = users[t.id] || {})[f.project] = 1;
-    });
-    return users;
-  }
-  var tUsers = sharedTargets();
+  var tUsers = {};
+  G.edges.forEach(function (e) {
+    var t = nodes[e.to], f = nodes[e.from];
+    if (t && t.type === "target" && f && f.project) (tUsers[t.id] = tUsers[t.id] || {})[f.project] = 1;
+  });
 
   function build() {
     var showShared = $("f-shared").checked, showEnv = $("f-env").checked, showArch = $("f-arch").checked, showHeur = $("f-heur").checked;
     var q = $("q").value.trim().toLowerCase();
     var els = [], seenN = {}, vis = {};
     function addNode(n) {
-      if (seenN[n.id]) return; seenN[n.id] = 1;
-      var d = { id: n.id, label: n.label, type: n.type, files: n.files || 0, archived: !!n.archived, lang: n.lang || "", open: !!expanded[n.id] };
+      if (seenN[n.id]) return;
+      if (n.type === "function") addNode(nodes[n.file]);
+      seenN[n.id] = 1;
+      var d = { id: n.id, label: n.label, type: n.type, files: n.files || 0, archived: !!n.archived, lang: n.lang || "", open: !!(expanded[n.id] || expandedFiles[n.id]) };
       if (n.type === "file") d.parent = n.project;
+      if (n.type === "function") d.file = n.file;
       els.push({ group: "nodes", data: d });
     }
     projects.forEach(function (p) {
@@ -194,10 +277,8 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       if (q && p.id.toLowerCase().indexOf(q) < 0 && !(filesOf[p.id] || []).some(function (f) { return f.id.toLowerCase().indexOf(q) >= 0; })) return;
       vis[p.id] = 2;
       addNode(p);
-      if (expanded[p.id]) (filesOf[p.id] || []).forEach(function (f) { if (hasLink(f.id)) addNode(f); });
+      if (expanded[p.id]) (filesOf[p.id] || []).forEach(function (f) { if (linked[f.id] || expandedFiles[f.id]) addNode(f); });
     });
-    var linked = {};
-    function hasLink(id) { if (!linked.built) { G.edges.forEach(function (e) { linked[e.from] = linked[e.to] = 1; }); linked.built = 1; } return !!linked[id]; }
     var agg = {};
     G.edges.forEach(function (e) {
       if (!showHeur && (e.confidence === "heuristic" || e.confidence === "doc")) return;
@@ -209,8 +290,6 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       var a = rep(e.from), b = rep(e.to); if (!a || !b || a === b) return;
       var pa = nodes[a].project || a, pb = nodes[b].project || b;
       if ((vis[pa] !== 2 && nodes[a].type !== "job") || (nodes[b].type !== "target" && nodes[b].type !== "job" && vis[pb] !== 2)) return;
-      if (nodes[a].type === "file" && !seenN[a]) addNode(nodes[a]);
-      if (nodes[b].type === "file" && !seenN[b]) addNode(nodes[b]);
       var k = a + "|" + b + "|" + e.kind;
       var o = agg[k] = agg[k] || { source: a, target: b, kind: e.kind, count: 0, loose: true };
       o.count++; if (e.confidence === "exact" || e.confidence === "resolved") o.loose = false;
@@ -220,16 +299,30 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       addNode(nodes[o.source]); addNode(nodes[o.target]);
       els.push({ group: "edges", data: { id: k, source: o.source, target: o.target, kind: o.kind, count: o.count, color: KCOL[o.kind] || "#64748b", loose: o.loose } });
     });
+    // functions of expanded files that have no edge in view still need to show
+    Object.keys(expandedFiles).forEach(function (fid) {
+      if (expandedFiles[fid] && nodes[fid] && expanded[nodes[fid].project] && seenN[fid]) (funcsOf[fid] || []).forEach(addNode);
+    });
     cy.elements().remove();
     cy.add(els);
-    cy.layout({ name: "cose", animate: false, nodeRepulsion: function () { return 40000; }, idealEdgeLength: function () { return 170; }, nodeOverlap: 30, numIter: 1500, gravity: 0.4, nodeDimensionsIncludeLabels: true, randomize: true, fit: true, padding: 30 }).run();
+    var fnNodes = cy.nodes("[type='function']");
+    cy.elements().not(fnNodes).not(fnNodes.connectedEdges()).layout({ name: "cose", animate: false, nodeRepulsion: function () { return 40000; }, idealEdgeLength: function () { return 170; }, nodeOverlap: 30, numIter: 1500, gravity: 0.4, nodeDimensionsIncludeLabels: true, randomize: true, fit: false, padding: 30 }).run();
+    var byFile = {};
+    fnNodes.forEach(function (f) { (byFile[f.data("file")] = byFile[f.data("file")] || []).push(f); });
+    Object.keys(byFile).forEach(function (fid) {
+      var fnode = cy.getElementById(fid); if (!fnode.length) return;
+      var pos = fnode.position(), arr = byFile[fid], r = 28 + arr.length * 3;
+      arr.forEach(function (f, i) { var ang = (2 * Math.PI * i) / arr.length; f.position({ x: pos.x + r * Math.cos(ang), y: pos.y + r * Math.sin(ang) }); });
+    });
+    cy.fit(undefined, 30);
     renderList();
+    if (view3d) render3d();
   }
 
   function renderList() {
     var ul = $("plist"); ul.innerHTML = "";
     projects.forEach(function (p) {
-      var b = el("button", { "aria-pressed": String(selected === p.id), onclick: function () { selectNode(p.id, true); } }, [
+      var b = el("button", { "aria-pressed": String(selected === p.id || (nodes[selected] && nodes[selected].project === p.id)), onclick: function () { selectNode(p.id, true); } }, [
         el("span", { class: "nm" + (p.archived ? " arch" : ""), text: p.label }),
         el("span", { class: "n", text: String(p.files) })
       ]);
@@ -249,6 +342,34 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     cy.edges().forEach(function (e) { if (set[e.source().id()] && set[e.target().id()]) e.removeClass("dim").addClass("hit"); });
   }
 
+  /* ---------------------------------------------------------- 3D view */
+  var fg3d = null;
+  function render3d() {
+    if (typeof ForceGraph3D === "undefined") { toast("3D library failed to load (check your connection)"); return; }
+    var ns = [], ls = [];
+    cy.nodes().forEach(function (n) { var d = n.data(); ns.push({ id: d.id, label: d.label, type: d.type }); });
+    cy.edges().forEach(function (e) { var d = e.data(); ls.push({ source: d.source, target: d.target, color: d.color, kind: d.kind }); });
+    var NCOL = { project: "#22c55e", file: "#60a5fa", function: "#f472b6", target: "#c084fc", job: "#22c55e" };
+    if (!fg3d) {
+      fg3d = ForceGraph3D()($("g3d")).backgroundColor("#0b1220").nodeLabel("label")
+        .nodeColor(function (n) { return NCOL[n.type] || "#94a3b8"; })
+        .nodeVal(function (n) { return n.type === "project" ? 8 : n.type === "target" ? 4 : 1.5; })
+        .linkColor(function (l) { return l.color; }).linkOpacity(0.5).linkDirectionalArrowLength(3).linkDirectionalArrowRelPos(1)
+        .onNodeClick(function (n) { selectNode(n.id, false); });
+    }
+    fg3d.width($("viewport").clientWidth).height($("viewport").clientHeight).graphData({ nodes: ns, links: ls });
+  }
+  function setView(is3d) {
+    view3d = is3d;
+    $("v2d").setAttribute("aria-pressed", String(!is3d)); $("v3d").setAttribute("aria-pressed", String(is3d));
+    $("cy").style.visibility = is3d ? "hidden" : "visible"; $("g3d").style.display = is3d ? "block" : "none";
+    if (is3d) render3d(); else cy.resize();
+  }
+  $("v2d").addEventListener("click", function () { setView(false); });
+  $("v3d").addEventListener("click", function () { setView(true); });
+  window.addEventListener("resize", function () { if (view3d && fg3d) fg3d.width($("viewport").clientWidth).height($("viewport").clientHeight); });
+
+  /* ---------------------------------------------------------- detail panel */
   function list(title, items, onclick, max) {
     if (!items.length) return null;
     var ul = el("ul");
@@ -258,24 +379,52 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     if (items.length > (max || 60)) ul.appendChild(el("li", { class: "sub", text: "+" + (items.length - (max || 60)) + " more" }));
     return el("div", { class: "card" }, [el("h3", { text: title + " (" + items.length + ")" }), ul]);
   }
+  function put(p, c) { if (c) p.appendChild(c); }
+  function ctxProject() { var n = nodes[selected]; return n ? (n.type === "project" ? n.id : n.project || null) : null; }
+
+  function renderPanel() {
+    var d = $("detail"); d.innerHTML = "";
+    var pid = ctxProject();
+    if (AV && pid) {
+      var tabs = el("div", { class: "tabs", role: "tablist" });
+      [["info", "Info"], ["chat", "Chat"], ["files", "Files"], ["run", "Scripts"]].forEach(function (t) {
+        tabs.appendChild(el("button", { role: "tab", "aria-selected": String(tab === t[0]), text: t[1], onclick: function () { tab = t[0]; renderPanel(); } }));
+      });
+      d.appendChild(tabs);
+    } else tab = "info";
+    var body = el("div", { class: "tabbody" });
+    d.appendChild(body);
+    if (tab === "chat") body.appendChild(chatPanel(pid));
+    else if (tab === "files") body.appendChild(filesPanel(pid));
+    else if (tab === "run") body.appendChild(scriptsPanel(pid));
+    else body.appendChild(infoPanel());
+  }
 
   function selectNode(id, focus) {
-    selected = id; var n = nodes[id], d = $("detail"); d.innerHTML = "";
+    selected = id; var n = nodes[id];
     if (!n) return;
     var node = cy.getElementById(id);
-    if (!node.length && n.type === "file") { expanded[n.project] = true; build(); node = cy.getElementById(id); }
-    if (node.length && focus) { cy.animate({ center: { eles: node }, zoom: Math.max(cy.zoom(), 0.9) }, { duration: 250 }); node.select(); }
-    highlight(id); renderList();
-    d.appendChild(el("h2", { text: n.type === "file" ? n.label : n.id }));
-    d.appendChild(el("div", { class: "sub", text: n.type + (n.path ? " - " + n.path : "") + (n.archived ? " - archived" : "") }));
+    if (!node.length && (n.type === "file" || n.type === "function")) {
+      expanded[n.project] = true;
+      if (n.type === "function") expandedFiles[n.file] = true;
+      build(); node = cy.getElementById(id);
+    }
+    if (node.length && focus && !view3d) { cy.animate({ center: { eles: node }, zoom: Math.max(cy.zoom(), 0.9) }, { duration: 250 }); node.select(); }
+    highlight(id); renderList(); renderPanel();
+  }
+
+  function infoPanel() {
+    var n = nodes[selected], d = el("div");
+    if (!n) { d.appendChild(el("p", { class: "sub", text: "Click a project or target for details. Double-click a project to expand its files, a file to expand its functions. Click a file or function to highlight everything that depends on it." })); return d; }
+    var id = n.id;
+    d.appendChild(el("h2", { text: n.type === "project" || n.type === "target" ? n.id : n.label }));
+    d.appendChild(el("div", { class: "sub", text: n.type + (n.path ? " - " + n.path : "") + (n.line ? " - line " + n.line : "") + (n.archived ? " - archived" : "") }));
     if (n.type === "project") {
       if (n.summary) d.appendChild(el("p", { text: n.summary }));
-      var row = el("div", { class: "row" }, [
-        el("button", { class: "btn", text: expanded[id] ? "Collapse files" : "Expand files", onclick: function () { toggle(id); } }),
-        el("button", { class: "btn ghost", text: "Copy Claude command", onclick: function () { copyCmd(n.path); } }),
-        el("button", { class: "btn ghost", text: "Open Claude here", disabled: "disabled", title: "Planned for phase 3 (local launcher)" })
-      ]);
-      d.appendChild(row);
+      d.appendChild(el("div", { class: "row" }, [
+        el("button", { class: "btn", text: expanded[id] ? "Collapse files" : "Expand files", onclick: function () { expanded[id] = !expanded[id]; build(); selectNode(id, true); } }),
+        el("button", { class: "btn ghost", text: "Copy Claude command", onclick: function () { copyCmd(n.path); } })
+      ]));
       var iss = hyg[id] || [];
       if (iss.length) d.appendChild(el("div", { class: "card" }, [el("h3", { text: "Hygiene" }), el("ul", {}, iss.map(function (i) { return el("li", {}, [el("span", { class: "tag warn", text: "!" }), " " + i]); }))]));
       var imp = IMP[id] || { direct: [], projects: [], targets: [] };
@@ -285,43 +434,280 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
         if (a.project === id && b.type === "target") tg[b.id] = b.label;
         else if (a.project === id && b.project && b.project !== id) deps[b.project] = 1;
       });
-      d.appendChild(list("Depends on", Object.keys(deps).map(function (x) { return { id: x, label: x }; }), function (x) { selectNode(x, true); }));
-      d.appendChild(list("Depended on by", (imp.projects || []).map(function (x) { return { id: x, label: x }; }), function (x) { selectNode(x, true); }));
-      d.appendChild(list("Targets", Object.keys(tg).map(function (x) { return { id: x, label: tg[x] }; }).filter(function (t) { return t.label !== t.label.toUpperCase(); }), function (x) { selectNode(x, true); }, 40));
-      d.appendChild(list("Files", (filesOf[id] || []).slice().sort(function (a, b) { return a.path < b.path ? -1 : 1; }).map(function (f) { return { id: f.id, label: f.path, tag: f.lang }; }), function (x) { selectNode(x, true); }, 80));
-    } else if (n.type === "file") {
-      d.appendChild(el("div", { class: "row" }, [el("button", { class: "btn ghost", text: "Go to project", onclick: function () { selectNode(n.project, true); } })]));
+      put(d, list("Depends on", Object.keys(deps).map(function (x) { return { id: x, label: x }; }), function (x) { selectNode(x, true); }));
+      put(d, list("Depended on by", (imp.projects || []).map(function (x) { return { id: x, label: x }; }), function (x) { selectNode(x, true); }));
+      put(d, list("Targets", Object.keys(tg).map(function (x) { return { id: x, label: tg[x] }; }).filter(function (t) { return t.label !== t.label.toUpperCase(); }), function (x) { selectNode(x, true); }, 40));
+      put(d, list("Files", (filesOf[id] || []).slice().sort(function (a, b) { return a.path < b.path ? -1 : 1; }).map(function (f) { return { id: f.id, label: f.path, tag: f.lang }; }), function (x) { selectNode(x, true); }, 80));
+    } else if (n.type === "file" || n.type === "function") {
+      d.appendChild(el("div", { class: "row" }, [
+        el("button", { class: "btn ghost", text: "Go to project", onclick: function () { selectNode(n.project, true); } }),
+        n.type === "file" && (funcsOf[id] || []).length ? el("button", { class: "btn", text: expandedFiles[id] ? "Hide functions" : "Show functions", onclick: function () { expandedFiles[id] = !expandedFiles[id]; expanded[n.project] = true; build(); selectNode(id, true); } }) : null,
+        n.type === "function" ? el("button", { class: "btn ghost", text: "Go to file", onclick: function () { selectNode(n.file, true); } }) : null
+      ]));
       var im = IMP[id];
       if (im) {
         d.appendChild(el("div", { class: "card" }, [el("h3", { text: "Impact if changed" }),
-          el("div", { text: im.direct.length + " direct, " + im.transitive.length + " total file dependents across " + im.projects.length + " other project(s)" })]));
-        d.appendChild(list("Direct dependents", im.direct.map(function (x) { return { id: x, label: x }; }), function (x) { selectNode(x, true); }));
-        d.appendChild(list("Scheduled jobs", im.jobs.map(function (x) { return { id: x, label: x }; }), null));
-        d.appendChild(list("Targets touched", im.targets.map(function (x) { return { id: x, label: (nodes[x] || {}).label || x }; }), function (x) { selectNode(x, true); }));
+          el("div", { text: im.direct.length + " direct, " + im.transitive.length + " total dependents across " + im.projects.length + " other project(s)" })]));
+        put(d, list(n.type === "function" ? "Callers" : "Direct dependents", im.direct.map(function (x) { return { id: x, label: x }; }), function (x) { selectNode(x, true); }));
+        put(d, list("Scheduled jobs", im.jobs.map(function (x) { return { id: x, label: x }; }), null));
+        put(d, list("Targets touched", im.targets.map(function (x) { return { id: x, label: (nodes[x] || {}).label || x }; }), function (x) { selectNode(x, true); }));
       } else d.appendChild(el("p", { class: "sub", text: "No dependents or targets found. Static scan: absence is not proof of independence." }));
+      if (n.type === "function") {
+        var callees = G.edges.filter(function (e) { return e.from === id && e.kind === "calls"; }).map(function (e) { return { id: e.to, label: e.to.split("/").slice(-1)[0], tag: e.confidence }; });
+        put(d, list("Calls", callees, function (x) { selectNode(x, true); }));
+      } else put(d, list("Functions", (funcsOf[id] || []).map(function (f) { return { id: f.id, label: f.label }; }), function (x) { selectNode(x, true); }, 80));
     } else if (n.type === "target") {
       var users = {}; G.edges.forEach(function (e) { if (e.to === id && nodes[e.from]) users[nodes[e.from].project] = (users[nodes[e.from].project] || 0) + 1; });
-      d.appendChild(list("Used by projects", Object.keys(users).map(function (x) { return { id: x, label: x, tag: users[x] + " files" }; }), function (x) { selectNode(x, true); }));
+      put(d, list("Used by projects", Object.keys(users).map(function (x) { return { id: x, label: x, tag: users[x] + " files" }; }), function (x) { selectNode(x, true); }));
     }
+    return d;
   }
 
-  function toggle(id) { expanded[id] = !expanded[id]; build(); selectNode(id, true); }
   function copyCmd(path) {
     var cmd = 'wt -d "' + path + '" claude';
     if (navigator.clipboard) navigator.clipboard.writeText(cmd).then(function () { toast("Copied: " + cmd); }, function () { toast(cmd); });
     else toast(cmd);
   }
 
+  /* ---------------------------------------------------------- chat tab */
+  var chats = {}, pinfo = {};
+  function getChat(pid) {
+    if (chats[pid]) return chats[pid];
+    var c = { pid: pid, box: el("div", { class: "term chatbox", "aria-live": "polite" }), sid: store("av.sid." + pid) || "", busy: false, runId: null, cur: null, partial: false, tools: {} };
+    chats[pid] = c; return c;
+  }
+  function addMsg(c, cls, text) { var e = el("div", { class: "msg " + cls, text: text }); c.box.appendChild(e); c.box.scrollTop = c.box.scrollHeight; return e; }
+  function toolSummary(inp) {
+    if (!inp) return "";
+    var s = inp.command || inp.file_path || inp.pattern || inp.path || inp.url || inp.description || JSON.stringify(inp);
+    return String(s).slice(0, 160);
+  }
+  function chatEvent(c, line) {
+    var o; try { o = JSON.parse(line); } catch (e) { addMsg(c, "sys", line); return; }
+    if (o.type === "system" && o.subtype === "init") { c.sid = o.session_id || c.sid; store("av.sid." + c.pid, c.sid); }
+    else if (o.type === "stream_event") {
+      var ev = o.event || {};
+      if (ev.type === "message_start") { c.cur = null; c.partial = false; }
+      else if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") {
+        if (!c.cur) c.cur = addMsg(c, "asst", "");
+        c.cur.textContent += ev.delta.text; c.partial = true; c.box.scrollTop = c.box.scrollHeight;
+      }
+    } else if (o.type === "assistant" && o.message && Array.isArray(o.message.content)) {
+      o.message.content.forEach(function (b) {
+        if (b.type === "text" && !c.partial && b.text) addMsg(c, "asst", b.text);
+        else if (b.type === "tool_use") {
+          var t = el("div", { class: "tool" }, [el("b", { text: b.name }), " " + toolSummary(b.input)]);
+          c.tools[b.id] = t; c.box.appendChild(t);
+        }
+      });
+      c.cur = null; c.partial = false; c.box.scrollTop = c.box.scrollHeight;
+    } else if (o.type === "user" && o.message && Array.isArray(o.message.content)) {
+      o.message.content.forEach(function (b) {
+        if (b.type === "tool_result" && c.tools[b.tool_use_id]) {
+          var txt = typeof b.content === "string" ? b.content : JSON.stringify(b.content);
+          c.tools[b.tool_use_id].appendChild(el("details", {}, [el("summary", { text: "result" + (b.is_error ? " (error)" : "") }), el("pre", { text: String(txt).slice(0, 1500) })]));
+        }
+      });
+    } else if (o.type === "result") {
+      addMsg(c, o.is_error ? "err" : "sys", (o.is_error ? "error: " : "done ") + (o.total_cost_usd != null ? "$" + Number(o.total_cost_usd).toFixed(4) + " " : "") + (o.duration_ms ? Math.round(o.duration_ms / 1000) + "s" : ""));
+      if (o.session_id) { c.sid = o.session_id; store("av.sid." + c.pid, c.sid); }
+    }
+  }
+  function chatPanel(pid) {
+    var c = getChat(pid), wrap = el("div", { class: "tabbody", style: "gap:8px" });
+    var ps = pinfo[pid];
+    var psLine = el("div", { class: "sub", text: ps ? "project settings: mode " + (ps.defaultMode || "default") + ", " + ps.allow + " allow, " + ps.deny + " deny" + (ps.files.length ? "" : " (none found)") : "project settings: loading" });
+    if (!ps) api("/api/project?id=" + encodeURIComponent(pid)).then(function (r) { pinfo[pid] = r.settings; psLine.textContent = "project settings: mode " + (r.settings.defaultMode || "default") + ", " + r.settings.allow + " allow, " + r.settings.deny + " deny" + (r.settings.files.length ? "" : " (none found)"); }).catch(function () {});
+    var sel = el("select", { "aria-label": "Permission mode" }, [
+      el("option", { value: "project", text: "Follow project settings" }),
+      el("option", { value: "acceptEdits", text: "Accept edits" }),
+      el("option", { value: "plan", text: "Plan only (read-only)" }),
+      el("option", { value: "bypass", text: "Bypass ALL permissions", disabled: AV.allowBypass ? false : "disabled" })
+    ]);
+    sel.value = c.mode || "project";
+    var banner = el("div", { class: "banner", text: "Bypass is on: Claude can run any command and edit any file in this project without asking.", hidden: "hidden" });
+    function syncBanner() { banner.hidden = c.mode !== "bypass"; }
+    sel.addEventListener("change", function () {
+      if (sel.value === "bypass" && !window.confirm("Bypass ALL permission checks for this project?\n\nClaude will run commands and edit files without asking. Use only in a project you trust.")) { sel.value = c.mode || "project"; return; }
+      c.mode = sel.value; syncBanner();
+    });
+    syncBanner();
+    if (!AV.allowBypass) sel.title = "Start the server with --allow-bypass to enable";
+    var ta = el("textarea", { rows: "3", placeholder: "Ask Claude about " + pid + " (Ctrl+Enter to send)", "aria-label": "Message" });
+    var send = el("button", { class: "btn", text: "Send" }), stop = el("button", { class: "btn ghost", text: "Stop", disabled: "disabled" });
+    var fresh = el("button", { class: "btn ghost sm", text: c.sid ? "New session" : "New session", onclick: function () { c.sid = ""; store("av.sid." + pid, ""); addMsg(c, "sys", "new session"); } });
+    function setBusy(b) { c.busy = b; send.disabled = b; stop.disabled = !b; }
+    setBusy(c.busy);
+    function go() {
+      var text = ta.value.trim(); if (!text || c.busy) return;
+      addMsg(c, "user", text); ta.value = ""; setBusy(true);
+      var feed = "";
+      api("/api/run", "POST", { kind: "chat", project: pid, prompt: text, mode: c.mode || "project", confirm_bypass: c.mode === "bypass", session_id: c.sid || undefined })
+        .then(function (r) {
+          c.runId = r.id;
+          streamRun(r.id, function (t) { feed += t; var i; while ((i = feed.indexOf("\n")) >= 0) { var line = feed.slice(0, i); feed = feed.slice(i + 1); if (line.trim()) chatEvent(c, line); } },
+            function (code) { if (feed.trim()) chatEvent(c, feed); if (code !== 0 && code !== null) addMsg(c, "err", "exited with code " + code); setBusy(false); c.runId = null; });
+        }).catch(function (e) { addMsg(c, "err", e.message); setBusy(false); });
+    }
+    send.addEventListener("click", go);
+    stop.addEventListener("click", function () { if (c.runId) api("/api/run/" + c.runId + "/stop", "POST", {}); });
+    ta.addEventListener("keydown", function (e) { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); go(); } });
+    if (!c.box.childNodes.length) addMsg(c, "sys", "Streams `claude -p` in " + pid + ". Sessions resume automatically.");
+    [psLine, el("div", { class: "row", style: "margin:0" }, [sel, fresh]), banner, c.box, ta, el("div", { class: "row", style: "margin:0" }, [send, stop])].forEach(function (x) { wrap.appendChild(x); });
+    c.box.scrollTop = c.box.scrollHeight;
+    return wrap;
+  }
+
+  /* ---------------------------------------------------------- files tab */
+  var fileCache = {};
+  function filesPanel(pid) {
+    var wrap = el("div", { class: "tabbody", style: "gap:8px" });
+    var list = el("div", { class: "card", style: "overflow:auto;flex:1;min-height:120px;margin:0" }), filter = el("input", { type: "search", placeholder: "filter files", "aria-label": "Filter files" });
+    function draw(files) {
+      var q = filter.value.toLowerCase(), ul = el("ul");
+      files.filter(function (f) { return !q || f.path.toLowerCase().indexOf(q) >= 0; }).slice(0, 400).forEach(function (f) {
+        ul.appendChild(el("li", {}, [el("button", { text: f.path, onclick: function () { openEditor(pid, f.path, wrap); } }), el("span", { class: "tag", text: Math.ceil(f.size / 1024) + " KB" })]));
+      });
+      list.innerHTML = ""; list.appendChild(ul);
+    }
+    if (fileCache[pid]) draw(fileCache[pid]);
+    else { list.textContent = "loading..."; api("/api/files?project=" + encodeURIComponent(pid)).then(function (r) { fileCache[pid] = r.files; draw(r.files); }).catch(function (e) { list.textContent = e.message; }); }
+    filter.addEventListener("input", function () { if (fileCache[pid]) draw(fileCache[pid]); });
+    wrap.appendChild(el("div", { class: "sub", text: AV.readOnly ? "Read-only server: files can be viewed, not saved." : "Click a file to view or edit. Secret files (.env, keys, tokens) are never shown." }));
+    wrap.appendChild(filter); wrap.appendChild(list);
+    return wrap;
+  }
+  function openEditor(pid, path, wrap) {
+    wrap.innerHTML = "";
+    var status = el("div", { class: "sub", text: "loading " + path });
+    var ta = el("textarea", { class: "ed", spellcheck: "false", "aria-label": "File content" });
+    var hash = "", dirty = false;
+    var save = el("button", { class: "btn", text: "Save", disabled: "disabled" });
+    var back = el("button", { class: "btn ghost", text: "Back to files", onclick: function () { if (dirty && !window.confirm("Discard unsaved changes?")) return; renderPanel(); } });
+    wrap.appendChild(el("div", { class: "row", style: "margin:0" }, [back, save]));
+    wrap.appendChild(el("div", { class: "sub", text: pid + "/" + path }));
+    wrap.appendChild(ta); wrap.appendChild(status);
+    api("/api/file?project=" + encodeURIComponent(pid) + "&path=" + encodeURIComponent(path)).then(function (r) {
+      ta.value = r.content; hash = r.hash; status.textContent = "loaded" + (r.crlf ? " (CRLF line endings kept on save)" : "");
+      if (!AV.readOnly) { ta.addEventListener("input", function () { dirty = true; save.disabled = false; status.textContent = "unsaved changes"; }); }
+      else { ta.readOnly = true; }
+    }).catch(function (e) { status.textContent = "cannot open: " + e.message; });
+    save.addEventListener("click", function () {
+      save.disabled = true; status.textContent = "saving...";
+      api("/api/file", "PUT", { project: pid, path: path, content: ta.value, hash: hash }).then(function (r) {
+        hash = r.hash; dirty = false; status.textContent = "saved. Previous version kept under out/backups. Rescan to update the map."; toast("Saved " + path);
+      }).catch(function (e) { save.disabled = false; status.textContent = "save failed: " + e.message; });
+    });
+  }
+
+  /* ---------------------------------------------------------- scripts tab */
+  var runOut = {};
+  function scriptsPanel(pid) {
+    var wrap = el("div", { class: "tabbody", style: "gap:8px" });
+    var listBox = el("div", { class: "card", style: "margin:0;max-height:38%;overflow:auto" }), out = runOut[pid] || (runOut[pid] = el("div", { class: "term", style: "flex:1;min-height:140px" }));
+    wrap.appendChild(el("div", { class: "sub", text: AV.readOnly ? "Read-only server: scripts cannot run." : "Runs a scanned script in its own folder, no arguments. Output streams below." }));
+    listBox.textContent = "loading...";
+    wrap.appendChild(listBox); wrap.appendChild(out);
+    api("/api/scripts?project=" + encodeURIComponent(pid)).then(function (r) {
+      listBox.innerHTML = "";
+      if (!r.scripts.length) { listBox.textContent = "No runnable scripts found in the scan."; return; }
+      var ul = el("ul");
+      r.scripts.forEach(function (s) {
+        var runBtn = el("button", { class: "btn sm", text: "Run", disabled: AV.readOnly ? "disabled" : false });
+        var stopBtn = el("button", { class: "btn ghost sm", text: "Stop", disabled: "disabled" });
+        var runId = null;
+        runBtn.addEventListener("click", function () {
+          if (!window.confirm("Run " + s.path + " now?\n\nThe script runs on this computer with your permissions.")) return;
+          out.textContent = "$ " + s.path + "\n"; runBtn.disabled = true;
+          api("/api/run", "POST", { kind: "script", file_id: s.id, confirm: true }).then(function (rr) {
+            runId = rr.id; stopBtn.disabled = false;
+            streamRun(rr.id, function (t) { out.appendChild(document.createTextNode(t)); out.scrollTop = out.scrollHeight; },
+              function (code) { out.appendChild(document.createTextNode("\n[exit " + code + "]\n")); out.scrollTop = out.scrollHeight; runBtn.disabled = AV.readOnly; stopBtn.disabled = true; });
+          }).catch(function (e) { out.textContent += "error: " + e.message + "\n"; runBtn.disabled = false; });
+        });
+        stopBtn.addEventListener("click", function () { if (runId) api("/api/run/" + runId + "/stop", "POST", {}); });
+        ul.appendChild(el("li", { style: "display:flex;gap:6px;align-items:center;justify-content:space-between" }, [el("span", { text: s.path, style: "overflow:hidden;text-overflow:ellipsis" }), el("span", { style: "display:flex;gap:4px;flex:none" }, [runBtn, stopBtn])]));
+      });
+      listBox.appendChild(ul);
+    }).catch(function (e) { listBox.textContent = e.message; });
+    return wrap;
+  }
+
+  /* ---------------------------------------------------------- setup + rescan */
+  function showModal(build) { var d = $("dlg"); d.innerHTML = ""; build(d); $("modal").classList.add("on"); }
+  function closeModal() { $("modal").classList.remove("on"); }
+  $("modal").addEventListener("click", function (e) { if (e.target === $("modal")) closeModal(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModal(); });
+
+  function runInModal(d, body, doneMsg, after) {
+    var out = el("div", { class: "term", style: "max-height:260px;margin-top:10px" }), st = el("div", { class: "sub", text: "starting" });
+    d.appendChild(out); d.appendChild(st);
+    return api("/api/run", "POST", body).then(function (r) {
+      var urlShown = false;
+      st.textContent = "running";
+      streamRun(r.id, function (t) {
+        out.appendChild(document.createTextNode(t)); out.scrollTop = out.scrollHeight;
+        if (body.kind === "login" && !urlShown) { var mm = /https:\/\/[^\s"]+/.exec(out.textContent); if (mm) { urlShown = true; d.appendChild(el("p", {}, ["Open to sign in: ", el("a", { href: mm[0], target: "_blank", rel: "noopener noreferrer", text: "claude.ai sign-in", style: "color:var(--accent)" })])); } }
+      }, function (code) { st.textContent = (code === 0 ? doneMsg : "finished with code " + code); if (after) after(code); });
+      if (body.kind === "login") {
+        var inp = el("input", { type: "text", placeholder: "paste the code here if asked, then Send", "aria-label": "Login code" });
+        d.appendChild(el("div", { class: "row" }, [inp, el("button", { class: "btn sm", text: "Send", onclick: function () { api("/api/run/" + r.id + "/stdin", "POST", { text: inp.value + "\n" }); inp.value = ""; } })]));
+      }
+    }).catch(function (e) { st.textContent = "error: " + e.message; });
+  }
+
+  function openSetup() {
+    api("/api/state").then(function (s) {
+      showModal(function (d) {
+        d.appendChild(el("h2", { id: "mtitle", text: "Claude setup" }));
+        var c = s.claude;
+        d.appendChild(el("p", {}, ["Installed: ", el("b", { class: c.installed ? "ok" : "bad", text: c.installed ? "yes, " + c.version : "no" })]));
+        d.appendChild(el("p", {}, ["Signed in: ", el("b", { class: c.loggedIn ? "ok" : "bad", text: c.loggedIn ? "yes (" + (c.auth.authMethod || "account") + ")" : "no" })]));
+        var actions = el("div", { class: "row" });
+        if (!c.installed) {
+          d.appendChild(el("p", { text: "This will run the official installer on this computer:" }));
+          d.appendChild(el("p", {}, [el("code", { class: "k", text: s.install.command })]));
+          actions.appendChild(el("button", { class: "btn", text: "Install Claude", disabled: s.readOnly ? "disabled" : false, onclick: function () {
+            if (!window.confirm("Run this command on your computer?\n\n" + s.install.command)) return;
+            actions.remove(); runInModal(d, { kind: "install", confirm_command: s.install.command }, "install finished. Close and reopen this dialog.", function () { }); } }));
+        } else if (!c.loggedIn) {
+          actions.appendChild(el("button", { class: "btn", text: "Sign in with Claude", onclick: function () { actions.remove(); runInModal(d, { kind: "login" }, "sign-in finished. Reopen this dialog to confirm.", function () { }); } }));
+        } else d.appendChild(el("p", { class: "ok", text: "Ready. Use the Chat tab on any project." }));
+        actions.appendChild(el("button", { class: "btn ghost", text: "Close", onclick: closeModal }));
+        d.appendChild(actions);
+      });
+    }).catch(function (e) { toast("setup: " + e.message); });
+  }
+
+  function rescan() {
+    showModal(function (d) {
+      d.appendChild(el("h2", { id: "mtitle", text: "Rescan" }));
+      runInModal(d, { kind: "scan" }, "done. Reloading.", function (code) { if (code === 0) setTimeout(function () { location.reload(); }, 800); });
+      d.appendChild(el("div", { class: "row" }, [el("button", { class: "btn ghost", text: "Close", onclick: closeModal })]));
+    });
+  }
+
+  if (AV) {
+    $("b-rescan").hidden = false; $("b-setup").hidden = false;
+    $("b-rescan").addEventListener("click", rescan);
+    $("b-setup").addEventListener("click", openSetup);
+    api("/api/state").then(function (s) {
+      if (!s.claude.installed || !s.claude.loggedIn) { $("b-setup").textContent = "Claude setup (needed)"; $("b-setup").classList.remove("ghost"); }
+    }).catch(function () {});
+  }
+
+  /* ---------------------------------------------------------- wiring */
   cy.on("tap", "node", function (ev) { selectNode(ev.target.id(), false); });
-  cy.on("dbltap", "node[type='project']", function (ev) { toggle(ev.target.id()); });
-  cy.on("tap", function (ev) { if (ev.target === cy) { clearHL(); selected = null; renderList(); $("detail").innerHTML = ""; cy.elements().unselect(); } });
+  cy.on("dbltap", "node[type='project']", function (ev) { var id = ev.target.id(); expanded[id] = !expanded[id]; build(); selectNode(id, true); });
+  cy.on("dbltap", "node[type='file']", function (ev) { var n = nodes[ev.target.id()]; if ((funcsOf[n.id] || []).length) { expandedFiles[n.id] = !expandedFiles[n.id]; build(); selectNode(n.id, true); } });
+  cy.on("tap", function (ev) { if (ev.target === cy) { clearHL(); selected = null; renderList(); renderPanel(); cy.elements().unselect(); } });
   ["f-shared", "f-env", "f-arch", "f-heur"].forEach(function (i) { $(i).addEventListener("change", build); });
   var qt; $("q").addEventListener("input", function () { clearTimeout(qt); qt = setTimeout(build, 200); });
   $("b-expand").addEventListener("click", function () { projects.forEach(function (p) { if ((filesOf[p.id] || []).length < 80) expanded[p.id] = true; }); build(); });
-  $("b-collapse").addEventListener("click", function () { expanded = {}; build(); });
+  $("b-collapse").addEventListener("click", function () { expanded = {}; expandedFiles = {}; build(); });
 
   build();
-  $("detail").appendChild(el("p", { class: "sub", text: "Click a project or target for details. Double-click a project to expand its files. Click a file to highlight everything that depends on it." }));
+  renderPanel();
 })();
 </script>
 </body>
