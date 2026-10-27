@@ -1206,9 +1206,10 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     $("b-rescan").hidden = false; $("b-setup").hidden = false; $("b-new").hidden = !!AV.readOnly;
     $("b-new").addEventListener("click", openNewProject);
     $("b-jobs").hidden = false; $("b-jobs").addEventListener("click", openAllJobs);
-    $("b-update").hidden = false; $("b-update").addEventListener("click", openUpdate);
+    $("b-update").addEventListener("click", openUpdate);
+    // checked on every page open; the button exists only while a newer release is out
     api("/api/update/check").then(function (u) {
-      if (u.newer) { $("b-update").textContent = "Update v" + u.latest; $("b-update").classList.remove("ghost"); }
+      if (u.newer) { $("b-update").textContent = "Update v" + u.latest; $("b-update").classList.remove("ghost"); $("b-update").hidden = false; }
     }).catch(function () {});
     $("b-global").hidden = false; $("b-global").addEventListener("click", openGlobal);
     $("b-rescan").addEventListener("click", rescan);
