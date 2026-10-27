@@ -15,7 +15,7 @@ Agentic View scans a folder of projects (each immediate subfolder is one project
 Module-level detail: the project is four small files, each documented by its public behaviour.
 
 ### scanner/scan.py
-- Purpose: discover files, parse them, resolve links (file imports, Python function calls, shell runs, cross-project paths), write outputs.
+- Purpose: discover files, parse them, resolve links (file imports, Python function calls, shell runs, cross-project paths), write outputs. First run in a terminal with no config asks for the projects folder and writes `scanner/config.local.json` (`first_run_setup`). Skips its own folder, and exits 1 with a message when the root has no projects.
 - Cross-module calls: writes `out/graph.json`, `out/graph.js`, `out/impact.json`, `out/INDEX.md`, `out/cache.json`.
 - Depends on (this codebase): none (Python standard library only).
 - Called by / Depended on by (this codebase): `scanner/impact.py` and `viewer/index.html` read its output files.

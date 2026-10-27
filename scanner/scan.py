@@ -110,6 +110,7 @@ def discover(roots, cfg):
     excl_dirs = set(cfg["exclude_dir_names"])
     arch_dirs = set(cfg["archive_dir_names"])
     excl_projects = set(cfg["exclude_projects"])
+    self_dir = norm(HERE.parent)
     for root in roots:
         rpath = Path(root["path"])
         if not rpath.is_dir():
@@ -119,6 +120,8 @@ def discover(roots, cfg):
         for pdir in sorted(p for p in rpath.iterdir() if p.is_dir()):
             if pdir.name in excl_projects or pdir.name in excl_dirs or pdir.name.startswith("."):
                 continue
+            if norm(pdir.resolve()) == self_dir:
+                continue  # never scan Agentic_View itself
             pid = prefix + pdir.name
             projects[pid] = {"path": pdir, "archived": bool(root.get("archived"))}
             for cur, dnames, fnames in os.walk(pdir):
@@ -831,6 +834,21 @@ def self_check(*texts):
     return hits
 
 
+def first_run_setup(local_cfg):
+    """No config yet: ask which folder holds the projects and save scanner/config.local.json."""
+    default = HERE.parent.parent
+    print("First run: which folder holds your projects? Each subfolder of it is one project.", flush=True)
+    print(f"Press Enter to use {default}", flush=True)
+    answer = input("Projects folder: ").strip().strip('"')
+    root = Path(answer or default).expanduser().resolve()
+    if not root.is_dir():
+        log(f"Not a folder: {root}. Nothing saved.")
+        sys.exit(1)
+    cfg = {"root": root.as_posix(), "exclude_projects": [HERE.parent.name]}
+    local_cfg.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+    log(f"saved {local_cfg} (edit it later to change the folder or exclude projects)")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Agentic_View scanner")
     ap.add_argument("--config", help="path to a JSON config (default: config.local.json if present)")
@@ -840,7 +858,10 @@ def main():
     ap.add_argument("--no-cache", action="store_true")
     args = ap.parse_args()
 
-    cfg_path = args.config or (str(HERE / "config.local.json") if (HERE / "config.local.json").exists() else None)
+    local_cfg = HERE / "config.local.json"
+    if not args.config and not args.root and not local_cfg.exists() and sys.stdin.isatty():
+        first_run_setup(local_cfg)
+    cfg_path = args.config or (str(local_cfg) if local_cfg.exists() else None)
     cfg = load_config(cfg_path)
     if args.root:
         cfg["root"] = args.root
@@ -852,6 +873,11 @@ def main():
     log(f"config: {cfg_path or 'defaults'}; root: {Path(cfg['root']).resolve()}")
 
     graph = scan(cfg, roots, use_cache=not args.no_cache)
+    if not graph["meta"]["projects"]:
+        log(f"No projects found in {Path(cfg['root']).resolve()}. 'root' must be a folder whose "
+            f"subfolders are your projects. Edit scanner/config.local.json (use forward slashes, "
+            f"e.g. \"C:/Users/you/Projects\") or run with --root <folder>.")
+        sys.exit(1)
     impact = build_impact(graph)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)

@@ -593,7 +593,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
   var chats = {}, pinfo = {};
   function getChat(pid) {
     if (chats[pid]) return chats[pid];
-    var c = { pid: pid, box: el("div", { class: "term chatbox", "aria-live": "polite" }), sid: store("av.sid." + pid) || "", runId: null, live: false, busy: false, cur: null, partial: false, tools: {}, mode: "project", ctx: "full", startMode: null, startCtx: null, checked: false, sync: null };
+    var c = { pid: pid, box: el("div", { class: "term chatbox", "aria-live": "polite" }), sid: store("av.sid." + pid) || "", runId: null, live: false, busy: false, cur: null, partial: false, tools: {}, mode: AV.readOnly ? "plan" : "acceptEdits", ctx: "full", startMode: null, startCtx: null, checked: false, sync: null };
     chats[pid] = c; return c;
   }
   function addMsg(c, cls, text) { var e = el("div", { class: "msg " + cls, text: text }); c.box.appendChild(e); c.box.scrollTop = c.box.scrollHeight; return e; }
@@ -696,8 +696,8 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     if (!ps) api("/api/project?id=" + encodeURIComponent(pid)).then(function (r) { pinfo[pid] = r.settings; psLine.textContent = psText(r.settings); }).catch(function () {});
     var status = el("span", { class: "tag", text: "no session" });
     var sel = el("select", { "aria-label": "Permission mode" }, [
-      el("option", { value: "project", text: "Follow project settings" }),
       el("option", { value: "acceptEdits", text: "Accept edits" }),
+      el("option", { value: "project", text: "Follow project settings" }),
       el("option", { value: "plan", text: "Plan only (read-only)" }),
       el("option", { value: "bypass", text: "Bypass ALL permissions", disabled: AV.allowBypass ? false : "disabled" })
     ]);

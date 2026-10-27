@@ -10,7 +10,9 @@ Scan a folder of projects and see how they connect. Agentic View builds a depend
 The scanner is read-only and never opens `.env` files (env key names found in code are recorded, values are not).
 
 ## Requirements
-Python 3.9+ (standard library only) and a modern browser. The page loads Cytoscape.js, 3d-force-graph and fonts from public CDNs. Chat needs Claude Code (the Setup screen can install it).
+- **Python 3.9+** (standard library only). Windows: install from python.org and tick "Add python.exe to PATH", or run `winget install Python.Python.3`. Developed and tested on Python 3.13.
+- **A modern browser.** The page loads Cytoscape.js, 3d-force-graph and fonts from public CDNs.
+- **Claude Code** (only for chat). The map, board and scripts work without it. Install and sign in from the Setup screen in the page, or install it yourself first.
 
 ## Quick start
 ```
@@ -23,7 +25,9 @@ python server/server.py --open
 ```
 One-step launcher (rescans, starts the server, opens the browser): double-click `start.bat` on Windows, or run `./start.sh` on macOS and Linux. Extra flags pass through, e.g. `start.bat --read-only`.
 
-For a persistent setup, copy `scanner/config.example.json` to `scanner/config.local.json` (gitignored).
+On the first run in a terminal, the scanner asks which folder holds your projects (Enter accepts the parent of this folder) and saves `scanner/config.local.json` (gitignored). To set it by hand, copy `scanner/config.example.json`.
+
+**Scan root rule:** `root` is a folder whose subfolders are the projects. Agentic View skips its own folder automatically, so it can sit inside the scanned folder or elsewhere. In JSON, write Windows paths with forward slashes (`"C:/Users/you/Projects"`) or doubled backslashes. If the root has no project subfolders, the scan stops with "No projects found in <path>".
 
 Scanner options: `--archive` includes `Archive/` folders, `--schedule` reads Windows Task Scheduler (read-only), `--no-cache` forces a full rescan.
 
@@ -35,7 +39,7 @@ Scanner options: `--archive` includes `Archive/` folders, `--schedule` reads Win
 - File edits stay inside the project folder, refuse secret files (`.env`, keys, tokens), and keep the previous version under `out/backups/`.
 - Scripts run only if they appear in the scan, with no arguments, after a confirm dialog.
 - Chat is a **live session**: one `claude` process per project stays open between messages (stream-json in and out), keeps its context like a terminal, survives page reloads (the transcript replays when you come back), and ends only when you press End session or stop the server. A mode or context change restarts it and resumes the same conversation. Up to 6 sessions at once.
-- The permission mode follows that project's own Claude settings by default. You can switch to accept-edits or plan-only. Tools that need approval are denied and listed in the chat (the CLI cannot ask the page). "Bypass ALL permissions" (`--dangerously-skip-permissions`) only works if you start the server with `--allow-bypass`, and asks for confirmation.
+- New chats start in **Accept edits** (Claude edits files in the project without asking; on a `--read-only` server they start in plan-only). You can switch to follow-project-settings or plan-only. Tools that need approval are denied and listed in the chat (the CLI cannot ask the page). "Bypass ALL permissions" (`--dangerously-skip-permissions`) only works if you start the server with `--allow-bypass`, and asks for confirmation.
 - **Context: full or lean.** Full loads your global Claude settings, memory and hooks on every cold start (about 45k tokens). Lean (`--setting-sources project,local`) loads only the project's settings and costs roughly half on a cold message. A warm live session is much cheaper per turn than a fresh call.
 - **New project** (header button): creates `Brief/`, `Deliverables/`, `Handover/`, `CLAUDE.md` (Goal, Tasks, Related projects, Rules), a Handover with one entry per task, and an `architecture.md` stub, then rescans and opens the project's chat with a starter prompt. Projects listed under "Related projects" in a `CLAUDE.md` show up as `declared` dependencies, so an agent can see what the new project needs from the others.
 - **Global CLAUDE.md** (header button): view and edit `~/.claude/CLAUDE.md` only. It asks for confirmation, refuses to overwrite if the file changed on disk, and keeps the previous version under `out/backups/global`. It is blocked in `--read-only`. It affects every Claude session, so live sessions need a restart to pick up changes.
