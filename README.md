@@ -20,6 +20,7 @@ Open `viewer/index.html` for the map only, or start the server for everything:
 ```
 python server/server.py --open
 ```
+One-step launcher (rescans, starts the server, opens the browser): double-click `start.bat` on Windows, or run `./start.sh` on macOS and Linux. Extra flags pass through, e.g. `start.bat --read-only`.
 
 For a persistent setup, copy `scanner/config.example.json` to `scanner/config.local.json` (gitignored).
 
