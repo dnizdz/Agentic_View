@@ -24,7 +24,7 @@ Module-level detail: the project is four small files, each documented by its pub
 - External: optionally runs `schtasks /query` (read-only, Windows) when `schedule` is enabled.
 
 ### server/server.py
-- Purpose: local HTTP server (standard library). Keeps a live `claude` session per project (stream-json over stdin/stdout, replayable), creates new projects (folder, CLAUDE.md goal/tasks/related, Handover, architecture stub), runs and stops scanned scripts, reads and writes project files, copies dropped files into a project (`/api/upload`), opens a file or folder in the OS file manager or default app (`/api/open`), lists and controls Windows Task Scheduler jobs (`/api/jobs`, `/api/job`), reruns the scanner, runs the Claude install and sign-in.
+- Purpose: local HTTP server (standard library). Keeps a live `claude` session per project (stream-json over stdin/stdout, replayable), creates new projects (folder, CLAUDE.md goal/tasks/related, Handover, architecture stub), runs and stops scanned scripts, reads and writes project files, copies dropped files into a project (`/api/upload`), opens a file or folder in the OS file manager or default app (`/api/open`), lists and controls Windows Task Scheduler jobs (`/api/jobs`, `/api/job`), checks for and installs a newer release from GitHub without git (`/api/update/check`, `/api/update`), reruns the scanner, runs the Claude install and sign-in.
 - Cross-module calls: imports `scanner/scan.py` for config defaults and the secret-file globs; reads `out/graph.json` to map project and file ids to folders; starts `scanner/scan.py` as a subprocess; writes file edits and backups (`out/backups/`).
 - Depends on (this codebase): `scanner/scan.py`, `out/graph.json`.
 - Called by / Depended on by (this codebase): `viewer/index.html` calls its `/api/*` endpoints.
@@ -60,6 +60,7 @@ flowchart LR
 
 ## External system boundaries
 - Windows Task Scheduler: `scan.py` reads task names and commands with `schtasks /query` to mark scheduled scripts (read-only, on by default, skipped on non-Windows). `server.py` also queries it live and, after a confirm in the page, runs `schtasks /run` or `/change /enable|/disable` for tasks that run a scanned file only. Blocked in `--read-only`.
+- GitHub (self-update): `server.py` calls `api.github.com/repos/<repo>/tags` to find the newest `vX.Y.Z` tag, and on confirm downloads `github.com/<repo>/archive/refs/tags/<tag>.zip` (public repo, no credentials, 20 MB cap). It checks the archive layout and that every `.py` compiles, backs up the files it replaces to `out/backups/update-*`, then writes only `scanner/`, `server/`, `viewer/`, launchers and root docs. Local config, `out/` and project folders are never written. Refused in a git clone and in `--read-only`. The repo name is a constant in `server.py`.
 - OS file manager and default apps: `server.py` asks the OS to show a project file or folder (`explorer /select,`, `open -R`, `xdg-open`) or open it with its default app. Types that would execute when opened (scripts, executables) are refused for the default app.
 - Dropped files: the page reads files dragged from Explorer/Finder and posts them to `/api/upload`; the server writes them inside the target project folder only, refuses secret names and traversal, never replaces without an explicit overwrite (old copy goes to `out/backups/`).
 - CDN (cdnjs, unpkg, Google Fonts): the viewer fetches Cytoscape.js, 3d-force-graph and fonts at page load.
@@ -76,8 +77,9 @@ flowchart LR
 - Chat is a live stream-json session, not a PTY terminal (no slash commands or TUI). The CLI cannot ask the page to approve a tool: denied tools are reported in the chat. Modes are project settings, accept-edits, plan, or bypass (needs `--allow-bypass`). A real terminal (PTY plus xterm.js) is not built.
 - Scheduler jobs cover Windows Task Scheduler only (English column names expected); cron and launchd are not read. Enable, Disable and Run now were not exercised against a real task during development (only the guards and the query were).
 - macOS and Linux launchers and the `open`/`xdg-open` paths are written but were not run on those systems.
+- The updater was tested end to end on Windows only (downloaded the real v1.1.0 tag into a copy of the app). Files locked by a running launcher are written as `.av-new` and listed for a manual rename. It does not delete files that a newer release removed, except the old `start.bat` and `start.sh`.
 - Dropped folders are skipped (files only). Moving files inside the tree is not built.
 - The server has no multi-user auth. It is for the local machine only.
 
 ## Last checked
-- 2026-10-27 (v1.1.0): module boundaries and external calls checked against scanner/scan.py, scanner/impact.py, server/server.py, viewer/index.html, the three launchers.
+- 2026-10-27 (v1.2.0): module boundaries and external calls checked against scanner/scan.py, scanner/impact.py, server/server.py, viewer/index.html, the three launchers.

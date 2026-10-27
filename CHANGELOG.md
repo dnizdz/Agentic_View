@@ -2,6 +2,11 @@
 
 Versions follow semantic versioning. The current version is in the `VERSION` file and is shown in the page header. Each release is a git tag `vX.Y.Z`.
 
+## 1.2.0 - 2026-10-27
+### Added
+- Update button (header): checks GitHub for the newest tagged version and updates the app by downloading the release zip. No git needed, works the same on Windows, macOS and Ubuntu. Replaces app files only; your `scanner/config.local.json`, `out/`, projects, `CLAUDE.md` and handover notes are never touched, and the replaced files are saved under `out/backups/update-<version>-<time>/`. A git clone is told to use `git pull` instead. Blocked in `--read-only`. After an update, stop the server and run the launcher again.
+- The header shows "Update available" when a newer version exists (one request to GitHub when the page loads).
+
 ## 1.1.0 - 2026-10-27
 ### Added
 - Files tab: open a file with its default app, or show it in Explorer/Finder. Folder rows and the project folder can be shown too. Files that would run when opened (scripts, executables) are refused for "default app".

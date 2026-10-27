@@ -156,6 +156,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     <button class="btn ghost sm" id="b-rescan" hidden>Rescan</button>
     <button class="btn sm" id="b-new" hidden>New project</button>
     <button class="btn ghost sm" id="b-jobs" hidden title="All Windows Task Scheduler jobs that run a scanned file">Scheduler jobs</button>
+    <button class="btn ghost sm" id="b-update" hidden title="Check GitHub for a newer version and update this app (no git needed)">Update</button>
     <button class="btn ghost sm" id="b-global" hidden title="Edit your global Claude instructions">Global CLAUDE.md</button>
     <button class="btn ghost sm" id="b-setup" hidden>Claude setup</button>
     <span class="tag warn" id="noserver" hidden title="Chat, Files and Scripts need the local server">viewer only: run start_windows.bat (or start_mac.command / start_ubuntu.sh) for chat, files, scripts</span>
@@ -1022,6 +1023,43 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     });
   }
 
+  /* ---------------------------------------------------------- update from GitHub */
+  function openUpdate() {
+    showModal(function (d) {
+      d.appendChild(el("h2", { id: "mtitle", text: "Update Agentic View" }));
+      var body = el("div", {}), actions = el("div", { class: "row" });
+      var close = el("button", { class: "btn ghost", text: "Close", onclick: closeModal });
+      d.appendChild(body); d.appendChild(actions);
+      body.appendChild(el("p", { class: "sub", text: "checking GitHub" })); actions.appendChild(close);
+      api("/api/update/check").then(function (u) {
+        body.innerHTML = "";
+        body.appendChild(el("p", {}, ["Installed: ", el("b", { text: "v" + (u.current || "unknown") }), "   Latest: ", el("b", { text: u.latest ? "v" + u.latest : "unknown" })]));
+        if (u.error) { body.appendChild(el("p", { class: "bad", text: u.error })); return; }
+        if (!u.newer) { body.appendChild(el("p", { class: "ok", text: "You are on the latest version." })); return; }
+        if (u.isClone) {
+          body.appendChild(el("p", { text: "This folder is a git clone, so update it with:" }));
+          body.appendChild(el("p", {}, [el("code", { class: "k", text: "git pull" })]));
+          return;
+        }
+        body.appendChild(el("p", { text: "A newer version is available. The update downloads it from github.com/" + u.repo + " and replaces the app files only. Your scan settings (config.local.json), scan results, projects, CLAUDE.md and handover notes are not touched. The old files are saved under out/backups first." }));
+        var go = el("button", { class: "btn", text: "Update to v" + u.latest, disabled: AV.readOnly ? "disabled" : false });
+        if (AV.readOnly) body.appendChild(el("p", { class: "sub", text: "Read-only server: updating is disabled." }));
+        go.addEventListener("click", function () {
+          if (!window.confirm("Download v" + u.latest + " from GitHub and replace the app files?")) return;
+          go.disabled = true; body.appendChild(el("p", { class: "sub", text: "downloading and installing" }));
+          api("/api/update", "POST", { version: "v" + u.latest, confirm: true }).then(function (r) {
+            body.innerHTML = "";
+            body.appendChild(el("p", { class: "ok", text: "Updated to v" + r.updated + " (" + r.files + " files). Old files saved under " + r.backup + "." }));
+            if (r.pending.length) body.appendChild(el("p", { class: "bad", text: "Could not replace while running: " + r.pending.join(", ") + ". After stopping the server, rename the .av-new copy next to each over the original." }));
+            body.appendChild(el("p", { text: "Restart to use the new version: stop this server (press Ctrl+C in its window, or close the window), then run your launcher again (start_windows.bat, start_mac.command or start_ubuntu.sh)." }));
+            go.remove();
+          }).catch(function (e) { go.disabled = false; body.appendChild(el("p", { class: "bad", text: "update failed: " + e.message })); });
+        });
+        actions.insertBefore(go, close);
+      }).catch(function (e) { body.innerHTML = ""; body.appendChild(el("p", { class: "bad", text: "check failed: " + e.message })); });
+    });
+  }
+
   /* ---------------------------------------------------------- setup + rescan */
   function showModal(build) { var d = $("dlg"); d.innerHTML = ""; build(d); $("modal").classList.add("on"); }
   function closeModal() { $("modal").classList.remove("on"); }
@@ -1145,6 +1183,10 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     $("b-rescan").hidden = false; $("b-setup").hidden = false; $("b-new").hidden = !!AV.readOnly;
     $("b-new").addEventListener("click", openNewProject);
     $("b-jobs").hidden = false; $("b-jobs").addEventListener("click", openAllJobs);
+    $("b-update").hidden = false; $("b-update").addEventListener("click", openUpdate);
+    api("/api/update/check").then(function (u) {
+      if (u.newer) { $("b-update").textContent = "Update available (v" + u.latest + ")"; $("b-update").classList.remove("ghost"); }
+    }).catch(function () {});
     $("b-global").hidden = false; $("b-global").addEventListener("click", openGlobal);
     $("b-rescan").addEventListener("click", rescan);
     $("b-setup").addEventListener("click", openSetup);

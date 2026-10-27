@@ -31,6 +31,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -483,6 +484,136 @@ def job_action(b):
     return {"ok": True, "output": out}
 
 
+# ------------------------------------------------------------------ self-update (no git needed)
+# Downloads the newest tagged release of the public repo as a zip and replaces the app files only.
+# Never touched: scanner/config.local.json, out/, any *.local.* file, project folders, CLAUDE.md, Brief/, Handover/.
+UPDATE_REPO = "dnizdz/Agentic_View"
+TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+MAX_ZIP = 20_000_000
+UPDATE_DIRS = ("scanner/", "server/", "viewer/")
+UPDATE_ROOT = re.compile(r"^(README\.md|CHANGELOG\.md|VERSION|LICENSE|CLAUDE\.example\.md|architecture\.md|\.gitignore|\.gitattributes|start_[a-z]+\.(bat|command|sh))$")
+UPDATE_SKIP = re.compile(r"(^|/)(__pycache__/|[^/]*\.local\.[^/]*$|[^/]*\.pyc$)")
+OBSOLETE = ("start.bat", "start.sh")   # replaced by the per-OS launchers in 1.1.0
+U_LOCK = threading.Lock()
+
+
+def vtuple(s):
+    m = TAG_RE.match(s or "") or re.match(r"^()(\d+)\.(\d+)\.(\d+)$", s or "")
+    return tuple(int(x) for x in m.groups()[-3:]) if m else None
+
+
+def http_get(url, limit):
+    req = urllib.request.Request(url, headers={"User-Agent": "AgenticView-updater"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        data = r.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError("download too large")
+    return data
+
+
+def latest_tag():
+    tags = json.loads(http_get(f"https://api.github.com/repos/{UPDATE_REPO}/tags?per_page=100", 2_000_000))
+    found = [(vtuple(t["name"]), t["name"]) for t in tags if TAG_RE.match(str(t.get("name", "")))]
+    return max(found)[1] if found else None
+
+
+def disk_version():
+    """Version of the files on disk (changes right after an update, before the server restarts)."""
+    try:
+        return (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        return VERSION
+
+
+def update_check():
+    cur = disk_version()
+    out = {"current": cur, "latest": None, "newer": False, "isClone": (ROOT / ".git").exists(), "repo": UPDATE_REPO, "error": ""}
+    try:
+        tag = latest_tag()
+    except (OSError, ValueError) as e:
+        out["error"] = f"could not reach GitHub ({type(e).__name__}). Check the internet connection."
+        if "CERTIFICATE_VERIFY_FAILED" in str(e):
+            out["error"] += " On macOS, run 'Install Certificates.command' from your Python folder in Applications, then try again."
+        return out
+    if tag:
+        out["latest"] = tag[1:]
+        out["newer"] = bool(vtuple(cur) and vtuple(tag) > vtuple(cur))
+    else:
+        out["error"] = "no released version found"
+    return out
+
+
+def update_apply(b):
+    ver = str(b.get("version", ""))
+    if b.get("confirm") is not True or not TAG_RE.match(ver):
+        return (400, "needs confirm and a version tag like v1.2.0")
+    if (ROOT / ".git").exists():
+        return (409, "this folder is a git clone: update it with git pull instead")
+    cur = disk_version()
+    if not vtuple(cur) or vtuple(ver) <= vtuple(cur):
+        return (409, "already up to date")
+    if not U_LOCK.acquire(blocking=False):
+        return (409, "an update is already running")
+    try:
+        import io
+        import zipfile
+        try:
+            data = http_get(f"https://github.com/{UPDATE_REPO}/archive/refs/tags/{ver}.zip", MAX_ZIP)
+            zf = zipfile.ZipFile(io.BytesIO(data))
+        except (OSError, ValueError, zipfile.BadZipFile) as e:
+            hint = " On macOS, run 'Install Certificates.command' from your Python folder in Applications." if "CERTIFICATE_VERIFY_FAILED" in str(e) else ""
+            return (502, f"download failed ({type(e).__name__}). Nothing was changed." + hint)
+        names = zf.namelist()
+        prefix = names[0].split("/")[0] + "/" if names else ""
+        if not prefix or sum(i.file_size for i in zf.infolist()) > 60_000_000 or any(
+                not n.startswith(prefix) or ".." in n.split("/") or n.startswith("/") or "\\" in n or ":" in n for n in names):
+            return (502, "unexpected archive layout. Nothing was changed.")
+        files = {}
+        for n in names:
+            rel = n[len(prefix):]
+            if not rel or n.endswith("/") or UPDATE_SKIP.search(rel):
+                continue
+            if rel.startswith(UPDATE_DIRS) or UPDATE_ROOT.match(rel):
+                files[rel] = zf.read(n)
+        need = ("VERSION", "server/server.py", "scanner/scan.py", "viewer/index.html")
+        if any(k not in files for k in need) or files["VERSION"].decode("utf-8", "replace").strip() != ver[1:]:
+            return (502, "archive does not match the requested version. Nothing was changed.")
+        for rel, raw in files.items():       # refuse to install code that does not even compile
+            if rel.endswith(".py"):
+                try:
+                    compile(raw, rel, "exec")
+                except SyntaxError:
+                    return (502, f"{rel} in the download has a syntax error. Nothing was changed.")
+        bdir = OUT / "backups" / f"update-{cur}-{time.strftime('%Y%m%d-%H%M%S')}"
+        pending, done = [], 0
+        for rel, raw in sorted(files.items()):
+            target = ROOT / rel
+            if target.exists():
+                (bdir / rel).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(target, bdir / rel)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            tmp = target.with_name(target.name + ".av-new")
+            tmp.write_bytes(raw)
+            if rel.endswith((".sh", ".command")) and os.name != "nt":
+                os.chmod(tmp, 0o755)
+            try:
+                os.replace(tmp, target)
+                done += 1
+            except OSError:                  # e.g. the .bat that is running right now is locked on Windows
+                pending.append(rel)
+        if not pending:
+            for old in OBSOLETE:
+                if (ROOT / old).exists() and (ROOT / "start_windows.bat").exists():
+                    try:
+                        os.remove(ROOT / old)
+                    except OSError:
+                        pass
+        log(f"updated {cur} -> {ver[1:]}: {done} files, {len(pending)} pending")
+        return {"updated": ver[1:], "files": done, "pending": pending, "backup": str(bdir.relative_to(ROOT)).replace("\\", "/")}
+    finally:
+        U_LOCK.release()
+
+
 # ------------------------------------------------------------------ handler
 class H(BaseHTTPRequestHandler):
     server_version = "AgenticView"
@@ -650,6 +781,8 @@ class H(BaseHTTPRequestHandler):
                    and Path(n["path"]).suffix.lower() in scripts_ext()]
             res.sort(key=lambda x: x["path"].lower())
             return self._send(200, {"scripts": res})
+        if p == "/api/update/check":
+            return self._send(200, update_check())
         if p == "/api/jobs":
             pid = g("project")
             jobs, note = sched_jobs()
@@ -750,6 +883,14 @@ class H(BaseHTTPRequestHandler):
             if S["read_only"]:
                 return self._err(403, "server is read-only")
             r = upload_file(b)
+            if isinstance(r, tuple):
+                return self._err(*r)
+            return self._send(200, r)
+
+        if p == "/api/update":
+            if S["read_only"]:
+                return self._err(403, "server is read-only")
+            r = update_apply(b)
             if isinstance(r, tuple):
                 return self._err(*r)
             return self._send(200, r)

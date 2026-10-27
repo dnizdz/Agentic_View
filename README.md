@@ -33,6 +33,8 @@ All three need Python 3.9+. Extra flags pass through, e.g. `start_windows.bat --
 
 The current version is in `VERSION` (shown in the page header). See `CHANGELOG.md`.
 
+**Updating without git:** click **Update** in the page header. It checks GitHub for the newest version tag, and on your confirmation downloads that release as a zip and replaces the app files (`scanner/`, `server/`, `viewer/`, launchers, docs). Your `scanner/config.local.json`, `out/`, projects, `CLAUDE.md` and handover notes are not touched, and the old files are saved under `out/backups/update-*`. Then stop the server and run your launcher again. If you installed with `git clone`, use `git pull` instead (the button says so). To install the first time without git, use GitHub's green **Code** button, then **Download ZIP**, unzip, and run your launcher. The update needs internet access to github.com and, on macOS, the Python certificates installed (run `Install Certificates.command` from the Python folder in Applications if it reports a certificate error).
+
 For a persistent setup, copy `scanner/config.example.json` to `scanner/config.local.json` (gitignored).
 
 Scanner options: `--archive` includes `Archive/` folders, `--no-schedule` skips Windows Task Scheduler (read on Windows by default, read-only), `--no-cache` forces a full rescan.
