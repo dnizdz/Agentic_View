@@ -1,6 +1,6 @@
 @echo off
 rem Agentic View: rescan, then start the local server and open the browser.
-rem Extra flags are passed to the server, e.g.  start.bat --allow-bypass   or   start.bat --read-only
+rem Extra flags are passed to the server, e.g.  start_windows.bat --allow-bypass   or   start_windows.bat --read-only
 cd /d "%~dp0"
 where python >nul 2>nul
 if errorlevel 1 (

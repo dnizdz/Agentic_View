@@ -10,6 +10,8 @@ Agentic View scans a folder of projects (each immediate subfolder is one project
 - `scanner/impact.py` - run manually via `python scanner/impact.py <file>`; reads `out/` and prints what depends on a file.
 - `viewer/index.html` - open directly (map only) or through the server (map plus management tabs); reads `out/graph.js`.
 - `server/server.py` - run manually via `python server/server.py`; binds 127.0.0.1, serves the viewer and the `/api/*` endpoints.
+- `start_windows.bat`, `start_mac.command`, `start_ubuntu.sh` - one launcher per OS: check Python 3.9+, run `scanner/scan.py`, then `server/server.py --open`. Extra flags pass through to the server.
+- `VERSION` - current release number (semantic versioning); read by `server/server.py`, shown in the page header. Release history is in `CHANGELOG.md`; releases are git tags `vX.Y.Z`.
 
 ## Modules
 Module-level detail: the project is four small files, each documented by its public behaviour.
@@ -22,11 +24,11 @@ Module-level detail: the project is four small files, each documented by its pub
 - External: optionally runs `schtasks /query` (read-only, Windows) when `schedule` is enabled.
 
 ### server/server.py
-- Purpose: local HTTP server (standard library). Keeps a live `claude` session per project (stream-json over stdin/stdout, replayable), creates new projects (folder, CLAUDE.md goal/tasks/related, Handover, architecture stub), runs and stops scanned scripts, reads and writes project files, reruns the scanner, runs the Claude install and sign-in.
+- Purpose: local HTTP server (standard library). Keeps a live `claude` session per project (stream-json over stdin/stdout, replayable), creates new projects (folder, CLAUDE.md goal/tasks/related, Handover, architecture stub), runs and stops scanned scripts, reads and writes project files, copies dropped files into a project (`/api/upload`), opens a file or folder in the OS file manager or default app (`/api/open`), lists and controls Windows Task Scheduler jobs (`/api/jobs`, `/api/job`), reruns the scanner, runs the Claude install and sign-in.
 - Cross-module calls: imports `scanner/scan.py` for config defaults and the secret-file globs; reads `out/graph.json` to map project and file ids to folders; starts `scanner/scan.py` as a subprocess; writes file edits and backups (`out/backups/`).
 - Depends on (this codebase): `scanner/scan.py`, `out/graph.json`.
 - Called by / Depended on by (this codebase): `viewer/index.html` calls its `/api/*` endpoints.
-- External: spawns one long-lived `claude` process per live session and `claude auth login` for sign-in; runs the official Claude installer command (fixed per OS, only after the page echoes it back); runs scanned scripts with the local interpreter.
+- External: spawns one long-lived `claude` process per live session and `claude auth login` for sign-in; runs the official Claude installer command (fixed per OS, only after the page echoes it back); runs scanned scripts with the local interpreter; runs `schtasks` (query, run, change enable/disable) and the OS opener (`explorer`, `os.startfile`, `open`, `xdg-open`).
 
 ### scanner/impact.py
 - Purpose: answer "what breaks if I change this file" and "what touches this target".
@@ -35,7 +37,7 @@ Module-level detail: the project is four small files, each documented by its pub
 - Called by / Depended on by (this codebase): none.
 
 ### viewer/index.html
-- Purpose: board view (a column per project: uses, external, used by) plus an interactive map (2D Cytoscape, 3D force graph) with project, file and function drill-down, impact highlighting, plus (when served) Chat, Files, Scripts tabs and the Setup dialog.
+- Purpose: board view (a column per project: uses, external, used by) plus an interactive map (2D Cytoscape, 3D force graph) with project, file and function drill-down, impact highlighting, plus (when served) Chat (with a Latest-message button), Files (folder tree, drag-and-drop upload, open buttons), Scripts, Scheduler Job tabs, a full-width project layout, a "Scheduler jobs only" filter, a global jobs dialog and the Setup dialog.
 - Cross-module calls: loads `out/graph.js` (sets `AGENTIC_GRAPH` and `AGENTIC_IMPACT`).
 - Depends on (this codebase): `scanner/scan.py` output; `server/server.py` endpoints when served.
 - Called by / Depended on by (this codebase): none.
@@ -57,7 +59,9 @@ flowchart LR
 ```
 
 ## External system boundaries
-- Windows Task Scheduler: `scan.py` reads task names and commands with `schtasks /query` to mark scheduled scripts. Read-only, off by default.
+- Windows Task Scheduler: `scan.py` reads task names and commands with `schtasks /query` to mark scheduled scripts (read-only, on by default, skipped on non-Windows). `server.py` also queries it live and, after a confirm in the page, runs `schtasks /run` or `/change /enable|/disable` for tasks that run a scanned file only. Blocked in `--read-only`.
+- OS file manager and default apps: `server.py` asks the OS to show a project file or folder (`explorer /select,`, `open -R`, `xdg-open`) or open it with its default app. Types that would execute when opened (scripts, executables) are refused for the default app.
+- Dropped files: the page reads files dragged from Explorer/Finder and posts them to `/api/upload`; the server writes them inside the target project folder only, refuses secret names and traversal, never replaces without an explicit overwrite (old copy goes to `out/backups/`).
 - CDN (cdnjs, unpkg, Google Fonts): the viewer fetches Cytoscape.js, 3d-force-graph and fonts at page load.
 - Claude CLI: the server spawns a long-lived `claude -p --input-format stream-json --output-format stream-json` process in a project folder per live session (max 6), and `claude auth login` for sign-in. Prompts go to Anthropic through the CLI.
 - Scan root: the server creates new project folders (scaffold files only) directly under the configured scan root; names are validated and existing folders are never overwritten.
@@ -70,7 +74,10 @@ flowchart LR
 - Function level covers Python only (top-level functions and classes; class methods are not separate nodes). JS/TS stay file-level.
 - Static analysis cannot see dynamic imports, runtime-built URLs or data passed through sheets; edges carry a confidence tag (exact, resolved, heuristic, doc).
 - Chat is a live stream-json session, not a PTY terminal (no slash commands or TUI). The CLI cannot ask the page to approve a tool: denied tools are reported in the chat. Modes are project settings, accept-edits, plan, or bypass (needs `--allow-bypass`). A real terminal (PTY plus xterm.js) is not built.
+- Scheduler jobs cover Windows Task Scheduler only (English column names expected); cron and launchd are not read. Enable, Disable and Run now were not exercised against a real task during development (only the guards and the query were).
+- macOS and Linux launchers and the `open`/`xdg-open` paths are written but were not run on those systems.
+- Dropped folders are skipped (files only). Moving files inside the tree is not built.
 - The server has no multi-user auth. It is for the local machine only.
 
 ## Last checked
-- 2026-10-27: module boundaries and external calls checked against scanner/scan.py, scanner/impact.py, server/server.py, viewer/index.html.
+- 2026-10-27 (v1.1.0): module boundaries and external calls checked against scanner/scan.py, scanner/impact.py, server/server.py, viewer/index.html, the three launchers.

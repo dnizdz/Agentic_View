@@ -2,7 +2,7 @@
   "root": "/path/to/your/projects",
   "exclude_projects": ["some_folder_to_skip"],
   "include_archive": false,
-  "schedule": false,
+  "schedule": true,
   "host_aliases": {"api.example.internal": "Billing API"},
   "extra_roots": []
 }

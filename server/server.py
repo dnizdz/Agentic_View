@@ -18,6 +18,7 @@ Usage:
   python server/server.py [--port 8765] [--open] [--read-only] [--allow-bypass]
 """
 import argparse
+import base64
 import codecs
 import fnmatch
 import hashlib
@@ -39,6 +40,10 @@ from urllib.parse import parse_qs, urlparse
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "out"
 VIEWER = ROOT / "viewer"
+try:
+    VERSION = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+except OSError:
+    VERSION = ""
 sys.path.insert(0, str(ROOT / "scanner"))
 import scan as scanmod  # noqa: E402  (read-only reuse of defaults)
 
@@ -345,6 +350,139 @@ def start_run(*a, **kw):
     return r
 
 
+# ------------------------------------------------------------------ open, upload, jobs
+# Opening a file with its default app would RUN these on Windows or macOS, so they are refused.
+RUNNABLE_EXT = {".bat", ".cmd", ".com", ".exe", ".msi", ".lnk", ".scr", ".hta", ".reg", ".vbs", ".vbe", ".js", ".jse",
+                ".wsf", ".wsh", ".ps1", ".psm1", ".py", ".pyw", ".sh", ".command", ".app", ".jar", ".url", ".cpl", ".msc"}
+MAX_UPLOAD = 25_000_000
+UPLOAD_BAD = re.compile(r'[\x00-\x1f<>:"/\\|?*]')
+
+
+def open_path(fp, mode):
+    """Reveal fp in the file manager, or open it with its default app. Returns None or (code, msg)."""
+    if mode == "default":
+        if fp.is_dir():
+            mode = "reveal"
+        elif fp.suffix.lower() in RUNNABLE_EXT:
+            return (400, "this type would run instead of open: use Show in folder, or edit it in the Files tab")
+    try:
+        if os.name == "nt":
+            if mode == "default":
+                os.startfile(str(fp))
+            elif fp.is_dir():
+                subprocess.Popen(["explorer", str(fp)])
+            else:
+                subprocess.Popen('explorer /select,"' + str(fp) + '"')   # paths cannot contain a double quote on Windows
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", "-R", str(fp)] if mode == "reveal" and fp.is_file() else ["open", str(fp)])
+        else:
+            subprocess.Popen(["xdg-open", str(fp if mode == "default" or fp.is_dir() else fp.parent)])
+    except OSError as e:
+        return (500, f"could not open: {type(e).__name__}")
+    return None
+
+
+def upload_file(b):
+    """Save a dropped file inside a project folder. Never overwrites unless overwrite is true (old copy is backed up)."""
+    pid, rel_dir, name = b.get("project", ""), str(b.get("dir", "")).strip("/\\"), str(b.get("name", ""))
+    base = project_dir(pid)
+    if not base:
+        return (404, "unknown project")
+    if (not name or len(name) > 200 or UPLOAD_BAD.search(name) or name in (".", "..") or name != name.strip()
+            or name.endswith(".") or is_secret(name) or name in SKIP_DIRS or name.lower().endswith(".av-tmp")
+            or name.split(".")[0].lower() in RESERVED):
+        return (400, "bad or refused file name")
+    folder = confine(pid, rel_dir) if rel_dir else Path(os.path.realpath(base))
+    if not folder or not folder.is_dir():
+        return (404, "target folder not available")
+    try:
+        data = base64.b64decode(b.get("data", ""), validate=True)
+    except (ValueError, TypeError):
+        return (400, "bad data")
+    if len(data) > MAX_UPLOAD:
+        return (413, "file too large (max 25 MB)")
+    target = folder / name
+    if os.path.realpath(target) != os.path.join(os.path.realpath(folder), name):
+        return (400, "bad file name")
+    if target.exists():
+        if b.get("overwrite") is not True:
+            return (409, "a file with this name already exists in that folder")
+        if not target.is_file():
+            return (400, "target is a folder")
+        bdir = OUT / "backups" / re.sub(r"[^A-Za-z0-9._-]", "_", pid)
+        bdir.mkdir(parents=True, exist_ok=True)
+        (bdir / f"{time.strftime('%Y%m%d-%H%M%S')}_{name}").write_bytes(target.read_bytes())
+    tmp = folder / (name + ".av-tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, target)
+    log(f"uploaded {pid}/{(rel_dir + '/' if rel_dir else '')}{name} ({len(data)} bytes)")
+    return {"path": target.relative_to(os.path.realpath(base)).as_posix(), "size": len(data)}
+
+
+def sched_jobs():
+    """Windows Task Scheduler tasks whose command points at a scanned file. Returns (jobs, note)."""
+    if os.name != "nt":
+        return [], "Task Scheduler is Windows only"
+    try:
+        res = subprocess.run(["schtasks", "/query", "/fo", "csv", "/v"], capture_output=True, text=True,
+                             timeout=90, encoding="utf-8", errors="replace")
+    except (OSError, subprocess.SubprocessError) as e:
+        return [], f"schtasks failed ({type(e).__name__})"
+    import csv
+    import io
+    rows = list(csv.reader(io.StringIO(res.stdout)))
+    if not rows:
+        return [], "schtasks returned nothing"
+    hdr = rows[0]
+    col = {h: i for i, h in enumerate(hdr)}
+    if "TaskName" not in col or "Task To Run" not in col:
+        return [], "unexpected schtasks columns (English Windows expected)"
+    norm = lambda p: os.path.normcase(os.path.normpath(p))
+    index = {}
+    for n in graph()["files"].values():
+        pdir = project_dir(n["project"])
+        if pdir:
+            index[norm(os.path.join(pdir, n["path"]))] = n
+    get = lambda r, k: r[col[k]] if k in col and len(r) > col[k] else ""
+    jobs, seen = [], set()
+    for r in rows[1:]:
+        name = get(r, "TaskName")
+        if not name or name == "TaskName" or name in seen:
+            continue
+        cmd = get(r, "Task To Run")
+        hits = [index[norm(m)] for m in re.findall(r"[A-Za-z]:\\[^\"]*?\.(?:py|js|ps1|bat|cmd)", cmd) if norm(m) in index]
+        if not hits:
+            continue
+        seen.add(name)
+        state = get(r, "Scheduled Task State")
+        jobs.append({"name": name, "label": name.strip("\\"), "projects": sorted({h["project"] for h in hits}),
+                     "script": hits[0]["path"], "schedule": get(r, "Schedule Type"), "next": get(r, "Next Run Time"),
+                     "last": get(r, "Last Run Time"), "result": get(r, "Last Result"), "status": get(r, "Status"),
+                     "enabled": state.lower() != "disabled", "cmd": cmd[:300]})
+    jobs.sort(key=lambda j: j["label"].lower())
+    return jobs, ""
+
+
+def job_action(b):
+    act = b.get("action")
+    if act not in ("run", "enable", "disable") or b.get("confirm") is not True:
+        return (400, "needs action (run, enable, disable) and confirm")
+    jobs, note = sched_jobs()
+    job = next((j for j in jobs if j["name"] == b.get("name")), None)
+    if not job:
+        return (404, note or "unknown job (only tasks that run a scanned file can be controlled)")
+    argv = ["schtasks", "/run", "/tn", job["name"]] if act == "run" else ["schtasks", "/change", "/tn", job["name"], "/enable" if act == "enable" else "/disable"]
+    try:
+        res = subprocess.run(argv, capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace")
+    except (OSError, subprocess.SubprocessError) as e:
+        return (500, f"schtasks failed ({type(e).__name__})")
+    out = (res.stdout.strip() + " " + res.stderr.strip()).strip()[:400]
+    log(f"job {act} {job['name']}: exit {res.returncode}")
+    if res.returncode != 0:
+        return (500, out or f"schtasks exit {res.returncode}")
+    return {"ok": True, "output": out}
+
+
 # ------------------------------------------------------------------ handler
 class H(BaseHTTPRequestHandler):
     server_version = "AgenticView"
@@ -380,7 +518,7 @@ class H(BaseHTTPRequestHandler):
 
     def _body(self):
         n = int(self.headers.get("Content-Length") or 0)
-        if n > MAX_BODY:
+        if n > (MAX_UPLOAD * 4 // 3 + 4096 if self.path.split("?")[0] == "/api/upload" else MAX_BODY):
             return None
         try:
             return json.loads(self.rfile.read(n).decode("utf-8") or "{}")
@@ -407,7 +545,7 @@ class H(BaseHTTPRequestHandler):
         if p in ("/", "/index.html"):
             html = (VIEWER / "index.html").read_text(encoding="utf-8")
             boot = ("<script>window.AV=" + json.dumps({"token": S["token"], "readOnly": S["read_only"],
-                                                      "allowBypass": S["allow_bypass"]}) + ";</script>")
+                                                      "allowBypass": S["allow_bypass"], "version": VERSION}) + ";</script>")
             html = html.replace("<!--AV_BOOT-->", boot)
             return self._send(200, html, "text/html", {"Set-Cookie": f"av={S['token']}; HttpOnly; SameSite=Strict; Path=/"})
         if p.startswith("/out/"):
@@ -512,6 +650,12 @@ class H(BaseHTTPRequestHandler):
                    and Path(n["path"]).suffix.lower() in scripts_ext()]
             res.sort(key=lambda x: x["path"].lower())
             return self._send(200, {"scripts": res})
+        if p == "/api/jobs":
+            pid = g("project")
+            jobs, note = sched_jobs()
+            if pid:
+                jobs = [j for j in jobs if pid in j["projects"]]
+            return self._send(200, {"jobs": jobs, "note": note, "readOnly": S["read_only"]})
         if p == "/api/global-claude":
             raw = GLOBAL_MD.read_bytes() if GLOBAL_MD.exists() else b""
             if len(raw) > MAX_FILE:
@@ -589,6 +733,34 @@ class H(BaseHTTPRequestHandler):
             os.replace(tmp, fp)
             log(f"saved {b['project']}/{b['path']}")
             return self._send(200, {"hash": hashlib.sha1(content.encode("utf-8")).hexdigest()})
+
+        if p == "/api/open":
+            fp = confine(b.get("project", ""), b.get("path", "")) if b.get("path") else project_dir(b.get("project", ""))
+            mode = b.get("mode")
+            if mode not in ("default", "reveal") or not fp or not fp.exists():
+                return self._err(400, "not available")
+            if mode == "default" and S["read_only"]:
+                return self._err(403, "server is read-only")
+            err = open_path(fp, mode)
+            if err:
+                return self._err(*err)
+            return self._send(200, {"ok": True})
+
+        if p == "/api/upload":
+            if S["read_only"]:
+                return self._err(403, "server is read-only")
+            r = upload_file(b)
+            if isinstance(r, tuple):
+                return self._err(*r)
+            return self._send(200, r)
+
+        if p == "/api/job":
+            if S["read_only"]:
+                return self._err(403, "server is read-only")
+            r = job_action(b)
+            if isinstance(r, tuple):
+                return self._err(*r)
+            return self._send(200, r)
 
         m = re.match(r"^/api/run/([0-9a-f]{12})/(stdin|stop)$", p)
         if m:
@@ -756,7 +928,7 @@ def main():
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), H)
     srv.daemon_threads = True
     url = f"http://127.0.0.1:{a.port}/"
-    log(f"Agentic View server on {url}  (read-only={S['read_only']}, allow-bypass={S['allow_bypass']})")
+    log(f"Agentic View {VERSION} server on {url}  (read-only={S['read_only']}, allow-bypass={S['allow_bypass']})")
     log("Local only. Press Ctrl+C to stop.")
     if a.open:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()

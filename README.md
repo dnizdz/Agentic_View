@@ -21,11 +21,21 @@ Open `viewer/index.html` for the map only, or start the server for everything:
 ```
 python server/server.py --open
 ```
-One-step launcher (rescans, starts the server, opens the browser): double-click `start.bat` on Windows, or run `./start.sh` on macOS and Linux. Extra flags pass through, e.g. `start.bat --read-only`.
+One-step launcher (rescans, starts the server, opens the browser), one per OS:
+
+| OS | Launcher | How |
+|---|---|---|
+| Windows | `start_windows.bat` | double-click |
+| macOS | `start_mac.command` | double-click in Finder (first time: right-click, Open) |
+| Ubuntu / Linux | `start_ubuntu.sh` | `./start_ubuntu.sh` (first time: `chmod +x start_ubuntu.sh`) |
+
+All three need Python 3.9+. Extra flags pass through, e.g. `start_windows.bat --read-only` or `./start_ubuntu.sh --allow-bypass`. On Linux the "Open" buttons and the browser launch need `xdg-utils` (`sudo apt install xdg-utils`). Scheduler jobs read Windows Task Scheduler, so that tab is empty on macOS and Linux.
+
+The current version is in `VERSION` (shown in the page header). See `CHANGELOG.md`.
 
 For a persistent setup, copy `scanner/config.example.json` to `scanner/config.local.json` (gitignored).
 
-Scanner options: `--archive` includes `Archive/` folders, `--schedule` reads Windows Task Scheduler (read-only), `--no-cache` forces a full rescan.
+Scanner options: `--archive` includes `Archive/` folders, `--no-schedule` skips Windows Task Scheduler (read on Windows by default, read-only), `--no-cache` forces a full rescan.
 
 ## The local server
 `server/server.py` is a browser-to-shell bridge, so it is strict:
@@ -39,6 +49,9 @@ Scanner options: `--archive` includes `Archive/` folders, `--schedule` reads Win
 - **Context: full or lean.** Full loads your global Claude settings, memory and hooks on every cold start (about 45k tokens). Lean (`--setting-sources project,local`) loads only the project's settings and costs roughly half on a cold message. A warm live session is much cheaper per turn than a fresh call.
 - **New project** (header button): creates `Brief/`, `Deliverables/`, `Handover/`, `CLAUDE.md` (Goal, Tasks, Related projects, Rules), a Handover with one entry per task, and an `architecture.md` stub, then rescans and opens the project's chat with a starter prompt. Projects listed under "Related projects" in a `CLAUDE.md` show up as `declared` dependencies, so an agent can see what the new project needs from the others.
 - **Global CLAUDE.md** (header button): view and edit `~/.claude/CLAUDE.md` only. It asks for confirmation, refuses to overwrite if the file changed on disk, and keeps the previous version under `out/backups/global`. It is blocked in `--read-only`. It affects every Claude session, so live sessions need a restart to pick up changes.
+- **Files tab**: files are grouped in a folder tree. A file opens in the editor, where "Open in default app" and "Show in folder" launch it on your computer (files that would run when opened, such as scripts and executables, are refused for the default app; use the editor). Drag files from Explorer/Finder onto a folder to copy them into the project: it confirms first, never replaces a file without asking, keeps the old copy under `out/backups/`, accepts files up to 25 MB, and skips dropped folders. Uploads and "Open in default app" are blocked in `--read-only`.
+- **Scheduler Job tab and Scheduler jobs button**: live view of Windows Task Scheduler jobs that run a scanned file, with Run now, Enable and Disable (each asks for confirmation, blocked in `--read-only`). Only tasks that point at a scanned file are listed or controllable. The sidebar filter "Scheduler jobs only" limits the board, map and list to projects with a job.
+- **Full width**: clicking a project gives the right panel the whole window; "Back to map" restores the layout (the choice is remembered in the browser).
 - The Setup screen shows the exact official install command and runs it only after you confirm. Sign-in is the normal Claude browser login, streamed into the page.
 - `--read-only` blocks file edits, script runs, install and any chat except plan mode.
 - You start it and you stop it (Ctrl+C). It is not a service. Do not expose the port to a network.
