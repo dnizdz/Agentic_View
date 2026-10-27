@@ -2,6 +2,10 @@
 
 Versions follow semantic versioning. The current version is in the `VERSION` file and is shown in the page header. Each release is a git tag `vX.Y.Z`.
 
+## 1.5.0 - 2026-10-27
+### Added
+- The launchers ask how much the app may do before it opens: 1 Read only, 2 Allow edit (default, press Enter), 3 Allow bypass (needs a typed YES). The choice is kept across update restarts. Passing `--read-only`, `--allow-edit` or `--allow-bypass` skips the question; with no terminal it starts in Allow edit.
+
 ## 1.4.0 - 2026-10-27
 ### Added
 - Merged from the setup-friendly-defaults work: first run in a terminal asks for the projects folder and saves `scanner/config.local.json`; the scanner skips its own folder and says so when the root has no projects; chat defaults to Accept edits; `--allow-edit` lets chat run python without asking (on by default in the launchers, ignored with `--read-only`); README explains the purpose and shows a screenshot.

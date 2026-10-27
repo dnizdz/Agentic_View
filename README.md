@@ -41,7 +41,15 @@ One-step launcher (rescans, starts the server, opens the browser), one per OS:
 | macOS | `start_mac.command` | double-click in Finder (first time: right-click, Open) |
 | Ubuntu / Linux | `start_ubuntu.sh` | `./start_ubuntu.sh` (first time: `chmod +x start_ubuntu.sh`) |
 
-All three need Python 3.9+. Extra flags pass through, e.g. `start_windows.bat --read-only` or `./start_ubuntu.sh --allow-bypass`. On Linux the "Open" buttons and the browser launch need `xdg-utils` (`sudo apt install xdg-utils`). Scheduler jobs read Windows Task Scheduler, so that tab is empty on macOS and Linux.
+All three need Python 3.9+. Every launch asks how much the app may do (press Enter for the default):
+
+| Pick | Mode | What it allows |
+|---|---|---|
+| 1 | Read only | View the map, board and files. No edits, no scripts, chat is plan-only (`--read-only`). |
+| 2 | Allow edit (default) | Edit files, run scripts, chat may edit and run python without asking (`--allow-edit`). |
+| 3 | Allow bypass | Everything in 2, plus a chat switch that lets Claude run any command and edit any file without asking. You must type `YES` to confirm (`--allow-bypass`). |
+
+The choice lasts until you stop the app and is kept across an in-app update restart. To skip the question (shortcuts, scripts), pass a flag: `start_windows.bat --read-only`, `./start_ubuntu.sh --allow-edit`, or `--allow-edit --allow-bypass`. Other flags such as `--port 9000` still show the question. Without a keyboard (no terminal) it starts in Allow edit. On Linux the "Open" buttons and the browser launch need `xdg-utils` (`sudo apt install xdg-utils`). Scheduler jobs read Windows Task Scheduler, so that tab is empty on macOS and Linux.
 
 The current version is in `VERSION` (shown in the page header). See `CHANGELOG.md`.
 
@@ -61,7 +69,7 @@ Scanner options: `--archive` includes `Archive/` folders, `--no-schedule` skips 
 - File edits stay inside the project folder, refuse secret files (`.env`, keys, tokens), and keep the previous version under `out/backups/`.
 - Scripts run only if they appear in the scan, with no arguments, after a confirm dialog.
 - Chat is a **live session**: one `claude` process per project stays open between messages (stream-json in and out), keeps its context like a terminal, survives page reloads (the transcript replays when you come back), and ends only when you press End session or stop the server. A mode or context change restarts it and resumes the same conversation. Up to 6 sessions at once.
-- **`--allow-edit`** (on by default in the launchers, ignored with `--read-only`): on top of Accept edits, chat may run `python ...` without asking. Anything else that needs approval (other commands) is still denied and listed. Note that `python *` can run any Python code, so use it only on projects you trust. If you run `python server/server.py` yourself, add the flag to get the same behaviour.
+- **`--allow-edit`** (the default pick in the launchers, ignored with `--read-only`): on top of Accept edits, chat may run `python ...` without asking. Anything else that needs approval (other commands) is still denied and listed. Note that `python *` can run any Python code, so use it only on projects you trust. If you run `python server/server.py` yourself, add the flag to get the same behaviour.
 - New chats start in **Accept edits** (Claude edits files in the project without asking; on a `--read-only` server they start in plan-only). You can switch to follow-project-settings or plan-only. Tools that need approval are denied and listed in the chat (the CLI cannot ask the page). "Bypass ALL permissions" (`--dangerously-skip-permissions`) only works if you start the server with `--allow-bypass`, and asks for confirmation.
 - **Context: full or lean.** Full loads your global Claude settings, memory and hooks on every cold start (about 45k tokens). Lean (`--setting-sources project,local`) loads only the project's settings and costs roughly half on a cold message. A warm live session is much cheaper per turn than a fresh call.
 - **New project** (header button): creates `Brief/`, `Deliverables/`, `Handover/`, `CLAUDE.md` (Goal, Tasks, Related projects, Rules), a Handover with one entry per task, and an `architecture.md` stub, then rescans and opens the project's chat with a starter prompt. Projects listed under "Related projects" in a `CLAUDE.md` show up as `declared` dependencies, so an agent can see what the new project needs from the others.

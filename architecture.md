@@ -11,7 +11,7 @@ Agentic View scans a folder of projects (each immediate subfolder is one project
 - `viewer/index.html` - open directly (map only) or through the server (map plus management tabs); reads `out/graph.js`.
 - `server/server.py` - run manually via `python server/server.py`; binds 127.0.0.1, serves the viewer and the `/api/*` endpoints.
 - `start_windows.bat`, `start_mac.command`, `start_ubuntu.sh` - one launcher per OS: check Python 3.9+, then run `launcher.py`. Extra flags pass through to the server.
-- `launcher.py` - runs `scanner/scan.py`, then `server/server.py` (with `AV_LAUNCHER=1`), and repeats both when the server exits with code 75 (restart requested after an update).
+- `launcher.py` - asks which access level to start with (1 read only, 2 allow edit, 3 allow bypass with a typed YES) unless a mode flag was passed or there is no terminal; then runs `scanner/scan.py` and `server/server.py` (with `AV_LAUNCHER=1`), and repeats both, keeping the same flags, when the server exits with code 75 (restart requested after an update).
 - `VERSION` - current release number (semantic versioning); read by `server/server.py`, shown in the page header. Release history is in `CHANGELOG.md`; releases are git tags `vX.Y.Z`.
 
 ## Modules
@@ -84,4 +84,4 @@ flowchart LR
 - The server has no multi-user auth. It is for the local machine only.
 
 ## Last checked
-- 2026-10-27 (v1.4.0): module boundaries and external calls checked against scanner/scan.py, scanner/impact.py, server/server.py, viewer/index.html, launcher.py, the three launchers.
+- 2026-10-27 (v1.5.0): module boundaries and external calls checked against scanner/scan.py, scanner/impact.py, server/server.py, viewer/index.html, launcher.py, the three launchers.
