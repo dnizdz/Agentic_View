@@ -18,6 +18,7 @@ Usage:
   python server/server.py [--port 8765] [--open] [--read-only] [--allow-bypass]
 """
 import argparse
+import base64
 import codecs
 import fnmatch
 import hashlib
@@ -30,6 +31,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -39,6 +41,10 @@ from urllib.parse import parse_qs, urlparse
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "out"
 VIEWER = ROOT / "viewer"
+try:
+    VERSION = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+except OSError:
+    VERSION = ""
 sys.path.insert(0, str(ROOT / "scanner"))
 import scan as scanmod  # noqa: E402  (read-only reuse of defaults)
 
@@ -349,6 +355,299 @@ def start_run(*a, **kw):
     return r
 
 
+# ------------------------------------------------------------------ open, upload, jobs
+# Opening a file with its default app would RUN these on Windows or macOS, so they are refused.
+RUNNABLE_EXT = {".bat", ".cmd", ".com", ".exe", ".msi", ".lnk", ".scr", ".hta", ".reg", ".vbs", ".vbe", ".js", ".jse",
+                ".wsf", ".wsh", ".ps1", ".psm1", ".py", ".pyw", ".sh", ".command", ".app", ".jar", ".url", ".cpl", ".msc"}
+MAX_UPLOAD = 25_000_000
+UPLOAD_BAD = re.compile(r'[\x00-\x1f<>:"/\\|?*]')
+
+
+def open_path(fp, mode):
+    """Reveal fp in the file manager, or open it with its default app. Returns None or (code, msg)."""
+    if mode == "default":
+        if fp.is_dir():
+            mode = "reveal"
+        elif fp.suffix.lower() in RUNNABLE_EXT:
+            return (400, "this type would run instead of open: use Show in folder, or edit it in the Files tab")
+    try:
+        if os.name == "nt":
+            if mode == "default":
+                os.startfile(str(fp))
+            elif fp.is_dir():
+                subprocess.Popen(["explorer", str(fp)])
+            else:
+                subprocess.Popen('explorer /select,"' + str(fp) + '"')   # paths cannot contain a double quote on Windows
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", "-R", str(fp)] if mode == "reveal" and fp.is_file() else ["open", str(fp)])
+        else:
+            subprocess.Popen(["xdg-open", str(fp if mode == "default" or fp.is_dir() else fp.parent)])
+    except OSError as e:
+        return (500, f"could not open: {type(e).__name__}")
+    return None
+
+
+def upload_file(b):
+    """Save a dropped file inside a project folder. Never overwrites unless overwrite is true (old copy is backed up)."""
+    pid, rel_dir, name = b.get("project", ""), str(b.get("dir", "")).strip("/\\"), str(b.get("name", ""))
+    base = project_dir(pid)
+    if not base:
+        return (404, "unknown project")
+    if (not name or len(name) > 200 or UPLOAD_BAD.search(name) or name in (".", "..") or name != name.strip()
+            or name.endswith(".") or is_secret(name) or name in SKIP_DIRS or name.lower().endswith(".av-tmp")
+            or name.split(".")[0].lower() in RESERVED):
+        return (400, "bad or refused file name")
+    folder = confine(pid, rel_dir) if rel_dir else Path(os.path.realpath(base))
+    if not folder or not folder.is_dir():
+        return (404, "target folder not available")
+    try:
+        data = base64.b64decode(b.get("data", ""), validate=True)
+    except (ValueError, TypeError):
+        return (400, "bad data")
+    if len(data) > MAX_UPLOAD:
+        return (413, "file too large (max 25 MB)")
+    target = folder / name
+    if os.path.realpath(target) != os.path.join(os.path.realpath(folder), name):
+        return (400, "bad file name")
+    if target.exists():
+        if b.get("overwrite") is not True:
+            return (409, "a file with this name already exists in that folder")
+        if not target.is_file():
+            return (400, "target is a folder")
+        bdir = OUT / "backups" / re.sub(r"[^A-Za-z0-9._-]", "_", pid)
+        bdir.mkdir(parents=True, exist_ok=True)
+        (bdir / f"{time.strftime('%Y%m%d-%H%M%S')}_{name}").write_bytes(target.read_bytes())
+    tmp = folder / (name + ".av-tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, target)
+    log(f"uploaded {pid}/{(rel_dir + '/' if rel_dir else '')}{name} ({len(data)} bytes)")
+    return {"path": target.relative_to(os.path.realpath(base)).as_posix(), "size": len(data)}
+
+
+def sched_jobs():
+    """Windows Task Scheduler tasks whose command points at a scanned file. Returns (jobs, note)."""
+    if os.name != "nt":
+        return [], "Task Scheduler is Windows only"
+    try:
+        res = subprocess.run(["schtasks", "/query", "/fo", "csv", "/v"], capture_output=True, text=True,
+                             timeout=90, encoding="utf-8", errors="replace")
+    except (OSError, subprocess.SubprocessError) as e:
+        return [], f"schtasks failed ({type(e).__name__})"
+    import csv
+    import io
+    rows = list(csv.reader(io.StringIO(res.stdout)))
+    if not rows:
+        return [], "schtasks returned nothing"
+    hdr = rows[0]
+    col = {h: i for i, h in enumerate(hdr)}
+    if "TaskName" not in col or "Task To Run" not in col:
+        return [], "unexpected schtasks columns (English Windows expected)"
+    norm = lambda p: os.path.normcase(os.path.normpath(p))
+    index = {}
+    for n in graph()["files"].values():
+        pdir = project_dir(n["project"])
+        if pdir:
+            index[norm(os.path.join(pdir, n["path"]))] = n
+    get = lambda r, k: r[col[k]] if k in col and len(r) > col[k] else ""
+    jobs, seen = [], set()
+    for r in rows[1:]:
+        name = get(r, "TaskName")
+        if not name or name == "TaskName" or name in seen:
+            continue
+        cmd = get(r, "Task To Run")
+        hits = [index[norm(m)] for m in re.findall(r"[A-Za-z]:\\[^\"]*?\.(?:py|js|ps1|bat|cmd)", cmd) if norm(m) in index]
+        if not hits:
+            continue
+        seen.add(name)
+        state = get(r, "Scheduled Task State")
+        jobs.append({"name": name, "label": name.strip("\\"), "projects": sorted({h["project"] for h in hits}),
+                     "script": hits[0]["path"], "schedule": get(r, "Schedule Type"), "next": get(r, "Next Run Time"),
+                     "last": get(r, "Last Run Time"), "result": get(r, "Last Result"), "status": get(r, "Status"),
+                     "enabled": state.lower() != "disabled", "cmd": cmd[:300]})
+    jobs.sort(key=lambda j: j["label"].lower())
+    return jobs, ""
+
+
+def job_action(b):
+    act = b.get("action")
+    if act not in ("run", "enable", "disable") or b.get("confirm") is not True:
+        return (400, "needs action (run, enable, disable) and confirm")
+    jobs, note = sched_jobs()
+    job = next((j for j in jobs if j["name"] == b.get("name")), None)
+    if not job:
+        return (404, note or "unknown job (only tasks that run a scanned file can be controlled)")
+    argv = ["schtasks", "/run", "/tn", job["name"]] if act == "run" else ["schtasks", "/change", "/tn", job["name"], "/enable" if act == "enable" else "/disable"]
+    try:
+        res = subprocess.run(argv, capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace")
+    except (OSError, subprocess.SubprocessError) as e:
+        return (500, f"schtasks failed ({type(e).__name__})")
+    out = (res.stdout.strip() + " " + res.stderr.strip()).strip()[:400]
+    log(f"job {act} {job['name']}: exit {res.returncode}")
+    if res.returncode != 0:
+        return (500, out or f"schtasks exit {res.returncode}")
+    return {"ok": True, "output": out}
+
+
+# ------------------------------------------------------------------ self-update (no git needed)
+# Downloads the newest tagged release of the public repo as a zip and replaces the app files only.
+# Never touched: scanner/config.local.json, out/, any *.local.* file, project folders, CLAUDE.md, Brief/, Handover/.
+UPDATE_REPO = "dnizdz/Agentic_View"
+TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+MAX_ZIP = 20_000_000
+UPDATE_DIRS = ("scanner/", "server/", "viewer/")
+UPDATE_ROOT = re.compile(r"^(README\.md|CHANGELOG\.md|VERSION|LICENSE|launcher\.py|CLAUDE\.example\.md|architecture\.md|\.gitignore|\.gitattributes|start_[a-z]+\.(bat|command|sh))$")
+UPDATE_SKIP = re.compile(r"(^|/)(__pycache__/|[^/]*\.local\.[^/]*$|[^/]*\.pyc$)")
+OBSOLETE = ("start.bat", "start.sh")   # replaced by the per-OS launchers in 1.1.0
+U_LOCK = threading.Lock()
+
+
+def vtuple(s):
+    m = TAG_RE.match(s or "") or re.match(r"^()(\d+)\.(\d+)\.(\d+)$", s or "")
+    return tuple(int(x) for x in m.groups()[-3:]) if m else None
+
+
+def http_get(url, limit):
+    req = urllib.request.Request(url, headers={"User-Agent": "AgenticView-updater"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        data = r.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError("download too large")
+    return data
+
+
+def latest_tag():
+    tags = json.loads(http_get(f"https://api.github.com/repos/{UPDATE_REPO}/tags?per_page=100", 2_000_000))
+    found = [(vtuple(t["name"]), t["name"]) for t in tags if TAG_RE.match(str(t.get("name", "")))]
+    return max(found)[1] if found else None
+
+
+def disk_version():
+    """Version of the files on disk (changes right after an update, before the server restarts)."""
+    try:
+        return (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        return VERSION
+
+
+def restart_soon():
+    """Stop live sessions and restart this server on the same port with the new files.
+    Under launcher.py (AV_LAUNCHER=1) exit with code 75 and the launcher starts it again.
+    Started any other way, start a fresh copy ourselves (its bind retries until this process is gone)."""
+    def go():
+        time.sleep(1.5)   # let the HTTP response reach the page first
+        for r in list(S["runs"].values()):
+            r.stop()
+        log("restarting")
+        if os.environ.get("AV_LAUNCHER") == "1":
+            os._exit(75)
+        argv = [sys.executable, "-I", str(ROOT / "server" / "server.py")] + [a for a in sys.argv[1:] if a != "--open"]
+        kw = {"cwd": str(ROOT)}
+        if os.name == "nt":
+            kw["creationflags"] = subprocess.CREATE_NEW_CONSOLE   # its own window, so it can be seen and stopped
+        else:
+            kw["start_new_session"] = True
+        try:
+            subprocess.Popen(argv, **kw)
+        except OSError as e:
+            log(f"restart failed ({type(e).__name__}): start the server again by hand")
+            return
+        os._exit(0)
+    threading.Thread(target=go, daemon=True).start()
+
+
+def update_check():
+    cur = disk_version()
+    out = {"current": cur, "latest": None, "newer": False, "isClone": (ROOT / ".git").exists(), "repo": UPDATE_REPO, "error": ""}
+    try:
+        tag = latest_tag()
+    except (OSError, ValueError) as e:
+        out["error"] = f"could not reach GitHub ({type(e).__name__}). Check the internet connection."
+        if "CERTIFICATE_VERIFY_FAILED" in str(e):
+            out["error"] += " On macOS, run 'Install Certificates.command' from your Python folder in Applications, then try again."
+        return out
+    if tag:
+        out["latest"] = tag[1:]
+        out["newer"] = bool(vtuple(cur) and vtuple(tag) > vtuple(cur))
+    else:
+        out["error"] = "no released version found"
+    return out
+
+
+def update_apply(b):
+    ver = str(b.get("version", ""))
+    if b.get("confirm") is not True or not TAG_RE.match(ver):
+        return (400, "needs confirm and a version tag like v1.2.0")
+    if (ROOT / ".git").exists():
+        return (409, "this folder is a git clone: update it with git pull instead")
+    cur = disk_version()
+    if not vtuple(cur) or vtuple(ver) <= vtuple(cur):
+        return (409, "already up to date")
+    if not U_LOCK.acquire(blocking=False):
+        return (409, "an update is already running")
+    try:
+        import io
+        import zipfile
+        try:
+            data = http_get(f"https://github.com/{UPDATE_REPO}/archive/refs/tags/{ver}.zip", MAX_ZIP)
+            zf = zipfile.ZipFile(io.BytesIO(data))
+        except (OSError, ValueError, zipfile.BadZipFile) as e:
+            hint = " On macOS, run 'Install Certificates.command' from your Python folder in Applications." if "CERTIFICATE_VERIFY_FAILED" in str(e) else ""
+            return (502, f"download failed ({type(e).__name__}). Nothing was changed." + hint)
+        names = zf.namelist()
+        prefix = names[0].split("/")[0] + "/" if names else ""
+        if not prefix or sum(i.file_size for i in zf.infolist()) > 60_000_000 or any(
+                not n.startswith(prefix) or ".." in n.split("/") or n.startswith("/") or "\\" in n or ":" in n for n in names):
+            return (502, "unexpected archive layout. Nothing was changed.")
+        files = {}
+        for n in names:
+            rel = n[len(prefix):]
+            if not rel or n.endswith("/") or UPDATE_SKIP.search(rel):
+                continue
+            if rel.startswith(UPDATE_DIRS) or UPDATE_ROOT.match(rel):
+                files[rel] = zf.read(n)
+        need = ("VERSION", "server/server.py", "scanner/scan.py", "viewer/index.html")
+        if any(k not in files for k in need) or files["VERSION"].decode("utf-8", "replace").strip() != ver[1:]:
+            return (502, "archive does not match the requested version. Nothing was changed.")
+        for rel, raw in files.items():       # refuse to install code that does not even compile
+            if rel.endswith(".py"):
+                try:
+                    compile(raw, rel, "exec")
+                except SyntaxError:
+                    return (502, f"{rel} in the download has a syntax error. Nothing was changed.")
+        bdir = OUT / "backups" / f"update-{cur}-{time.strftime('%Y%m%d-%H%M%S')}"
+        pending, done = [], 0
+        for rel, raw in sorted(files.items()):
+            target = ROOT / rel
+            if target.exists() and target.read_bytes().replace(b"\r\n", b"\n") == raw.replace(b"\r\n", b"\n"):
+                continue   # unchanged (also keeps a launcher that may be running untouched)
+            if target.exists():
+                (bdir / rel).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(target, bdir / rel)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            tmp = target.with_name(target.name + ".av-new")
+            tmp.write_bytes(raw)
+            if rel.endswith((".sh", ".command")) and os.name != "nt":
+                os.chmod(tmp, 0o755)
+            try:
+                os.replace(tmp, target)
+                done += 1
+            except OSError:                  # e.g. the .bat that is running right now is locked on Windows
+                pending.append(rel)
+        if not pending:
+            for old in OBSOLETE:
+                if (ROOT / old).exists() and (ROOT / "start_windows.bat").exists():
+                    try:
+                        os.remove(ROOT / old)
+                    except OSError:
+                        pass
+        log(f"updated {cur} -> {ver[1:]}: {done} files, {len(pending)} pending")
+        restart_soon()
+        return {"updated": ver[1:], "files": done, "pending": pending, "restarting": True,
+                "backup": str(bdir.relative_to(ROOT)).replace("\\", "/")}
+    finally:
+        U_LOCK.release()
+
+
 # ------------------------------------------------------------------ handler
 class H(BaseHTTPRequestHandler):
     server_version = "AgenticView"
@@ -384,7 +683,7 @@ class H(BaseHTTPRequestHandler):
 
     def _body(self):
         n = int(self.headers.get("Content-Length") or 0)
-        if n > MAX_BODY:
+        if n > (MAX_UPLOAD * 4 // 3 + 4096 if self.path.split("?")[0] == "/api/upload" else MAX_BODY):
             return None
         try:
             return json.loads(self.rfile.read(n).decode("utf-8") or "{}")
@@ -411,7 +710,7 @@ class H(BaseHTTPRequestHandler):
         if p in ("/", "/index.html"):
             html = (VIEWER / "index.html").read_text(encoding="utf-8")
             boot = ("<script>window.AV=" + json.dumps({"token": S["token"], "readOnly": S["read_only"],
-                                                      "allowBypass": S["allow_bypass"]}) + ";</script>")
+                                                      "allowBypass": S["allow_bypass"], "version": VERSION}) + ";</script>")
             html = html.replace("<!--AV_BOOT-->", boot)
             return self._send(200, html, "text/html", {"Set-Cookie": f"av={S['token']}; HttpOnly; SameSite=Strict; Path=/"})
         if p.startswith("/out/"):
@@ -516,6 +815,14 @@ class H(BaseHTTPRequestHandler):
                    and Path(n["path"]).suffix.lower() in scripts_ext()]
             res.sort(key=lambda x: x["path"].lower())
             return self._send(200, {"scripts": res})
+        if p == "/api/update/check":
+            return self._send(200, update_check())
+        if p == "/api/jobs":
+            pid = g("project")
+            jobs, note = sched_jobs()
+            if pid:
+                jobs = [j for j in jobs if pid in j["projects"]]
+            return self._send(200, {"jobs": jobs, "note": note, "readOnly": S["read_only"]})
         if p == "/api/global-claude":
             raw = GLOBAL_MD.read_bytes() if GLOBAL_MD.exists() else b""
             if len(raw) > MAX_FILE:
@@ -593,6 +900,42 @@ class H(BaseHTTPRequestHandler):
             os.replace(tmp, fp)
             log(f"saved {b['project']}/{b['path']}")
             return self._send(200, {"hash": hashlib.sha1(content.encode("utf-8")).hexdigest()})
+
+        if p == "/api/open":
+            fp = confine(b.get("project", ""), b.get("path", "")) if b.get("path") else project_dir(b.get("project", ""))
+            mode = b.get("mode")
+            if mode not in ("default", "reveal") or not fp or not fp.exists():
+                return self._err(400, "not available")
+            if mode == "default" and S["read_only"]:
+                return self._err(403, "server is read-only")
+            err = open_path(fp, mode)
+            if err:
+                return self._err(*err)
+            return self._send(200, {"ok": True})
+
+        if p == "/api/upload":
+            if S["read_only"]:
+                return self._err(403, "server is read-only")
+            r = upload_file(b)
+            if isinstance(r, tuple):
+                return self._err(*r)
+            return self._send(200, r)
+
+        if p == "/api/update":
+            if S["read_only"]:
+                return self._err(403, "server is read-only")
+            r = update_apply(b)
+            if isinstance(r, tuple):
+                return self._err(*r)
+            return self._send(200, r)
+
+        if p == "/api/job":
+            if S["read_only"]:
+                return self._err(403, "server is read-only")
+            r = job_action(b)
+            if isinstance(r, tuple):
+                return self._err(*r)
+            return self._send(200, r)
 
         m = re.match(r"^/api/run/([0-9a-f]{12})/(stdin|stop)$", p)
         if m:
@@ -761,10 +1104,21 @@ def main():
     a = ap.parse_args()
     S.update(token=secrets.token_urlsafe(32), port=a.port, read_only=a.read_only, allow_bypass=a.allow_bypass and not a.read_only,
              allow_edit=a.allow_edit and not a.read_only)
-    srv = ThreadingHTTPServer(("127.0.0.1", a.port), H)
+    srv = None
+    for attempt in range(40):   # after an update restart the old process may still hold the port for a moment
+        try:
+            srv = ThreadingHTTPServer(("127.0.0.1", a.port), H)
+            break
+        except OSError:
+            if attempt == 0:
+                log(f"port {a.port} is busy, waiting for it to free up")
+            time.sleep(0.5)
+    if srv is None:
+        log(f"port {a.port} stays busy: stop the other program or start with --port <number>")
+        sys.exit(1)
     srv.daemon_threads = True
     url = f"http://127.0.0.1:{a.port}/"
-    log(f"Agentic View server on {url}  (read-only={S['read_only']}, allow-edit={S['allow_edit']}, allow-bypass={S['allow_bypass']})")
+    log(f"Agentic View {VERSION} server on {url}  (read-only={S['read_only']}, allow-edit={S['allow_edit']}, allow-bypass={S['allow_bypass']})")
     log("Local only. Press Ctrl+C to stop.")
     if a.open:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()

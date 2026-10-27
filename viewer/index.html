@@ -111,9 +111,39 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
 .sect { font: 500 11px var(--mono); color: var(--text-dim); text-transform: uppercase; letter-spacing: .08em; margin: 10px 0 4px; }
 .dcard { display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin: 3px 0; min-height: 32px; color: var(--text); word-break: break-word; }
 .dcard:hover { border-color: var(--text-dim); }
+.dcard.jb { border-left: 3px solid var(--runs); }
 .dcard.proj { border-left: 3px solid var(--accent); } .dcard.tg { border-left: 3px solid var(--target); } .dcard.by { border-left: 3px solid var(--imports); }
 .dcard .n { font: 400 11px var(--mono); color: var(--text-dim); flex: none; }
 .ok { color: var(--accent); } .bad { color: var(--danger); }
+/* file tree */
+.tree { list-style: none; margin: 0; padding: 0; }
+.tree .kids { list-style: none; margin: 0 0 0 14px; padding: 0 0 0 6px; border-left: 1px solid var(--border); }
+.tree li { padding: 1px 0; }
+.trow { display: flex; align-items: center; gap: 6px; border-radius: 6px; padding: 1px 4px; }
+.trow > button.nm { background: none; border: 0; padding: 3px 2px; text-align: left; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow > button.nm:hover { color: var(--accent); }
+.trow.dir > button.nm { font-weight: 500; }
+.trow .go { background: none; border: 1px solid transparent; color: var(--text-dim); font: 400 11px var(--mono); padding: 1px 6px; border-radius: 4px; visibility: hidden; }
+.trow:hover .go, .trow .go:focus-visible { visibility: visible; border-color: var(--border); }
+.trow.over { background: rgba(34,197,94,.18); outline: 1px dashed var(--accent); }
+.dropzone.over { outline: 2px dashed var(--accent); outline-offset: -2px; background: rgba(34,197,94,.06); }
+/* chat jump button */
+.chatwrap { position: relative; flex: 1; min-height: 160px; display: flex; flex-direction: column; }
+.chatwrap .chatbox { flex: 1; min-height: 0; }
+.latest { position: absolute; right: 14px; bottom: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+/* full-width detail */
+.app.wide { grid-template-columns: 1fr; }
+.app.wide aside, .app.wide #viewport { display: none; }
+.app.wide section.detail { border-left: 0; padding: 12px max(12px, calc((100vw - 1100px) / 2)); }
+.tabs .sp { flex: 1; }
+.tabs select { width: auto; max-width: 220px; min-height: 28px; align-self: center; padding: 3px 8px; }
+.tabs .btn { align-self: center; margin-left: 4px; }
+/* jobs */
+.job { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; padding: 8px 10px; margin: 0 0 8px; }
+.job.off { border-left-color: var(--text-dim); opacity: .8; }
+.job h4 { margin: 0 0 2px; font: 600 13px var(--mono); word-break: break-word; }
+.job dl { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 4px 0; font: 400 12px var(--mono); color: var(--text-dim); }
+.job dd { margin: 0; color: var(--text); word-break: break-word; }
 @media (max-width: 1000px) { .app { grid-template-columns: 1fr; grid-template-rows: 48px 40vh 1fr auto; } aside, section.detail { max-height: 40vh; } .legend { left: 12px; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
@@ -125,9 +155,11 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     <div class="seg" role="group" aria-label="View mode"><button id="vbd" aria-pressed="true">Board</button><button id="v2d" aria-pressed="false">2D</button><button id="v3d" aria-pressed="false">3D</button></div>
     <button class="btn ghost sm" id="b-rescan" hidden>Rescan</button>
     <button class="btn sm" id="b-new" hidden>New project</button>
+    <button class="btn ghost sm" id="b-jobs" hidden title="All Windows Task Scheduler jobs that run a scanned file">Scheduler jobs</button>
+    <button class="btn ghost sm" id="b-update" hidden title="Check GitHub for a newer version and update this app (no git needed)">Update</button>
     <button class="btn ghost sm" id="b-global" hidden title="Edit your global Claude instructions">Global CLAUDE.md</button>
     <button class="btn ghost sm" id="b-setup" hidden>Claude setup</button>
-    <span class="tag warn" id="noserver" hidden title="Chat, Files and Scripts need the local server">viewer only: run start.bat for chat, files, scripts</span>
+    <span class="tag warn" id="noserver" hidden title="Chat, Files and Scripts need the local server">viewer only: run start_windows.bat (or start_mac.command / start_ubuntu.sh) for chat, files, scripts</span>
     <div class="stats" id="stats" aria-live="polite"></div>
   </header>
   <aside aria-label="Filters and projects">
@@ -138,6 +170,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     <label class="chk"><input type="checkbox" id="f-env"> Env key names</label>
     <label class="chk"><input type="checkbox" id="f-arch" checked> Archived projects</label>
     <label class="chk"><input type="checkbox" id="f-heur" checked> Heuristic and doc links</label>
+    <label class="chk" title="Only projects that have a Windows Task Scheduler job"><input type="checkbox" id="f-jobs"> Scheduler jobs only</label>
     <div class="row"><button class="btn ghost" id="b-expand">Expand all</button><button class="btn ghost" id="b-collapse">Collapse all</button></div>
     <label class="lbl">Projects</label>
     <ul class="plist" id="plist"></ul>
@@ -237,6 +270,14 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     else if (n.type === "function") (funcsOf[n.file] = funcsOf[n.file] || []).push(n);
   });
   var linked = {}; G.edges.forEach(function (e) { linked[e.from] = linked[e.to] = 1; });
+  var jobProj = {}, jobsOf = {};   // projects that have a scheduler job (from the scan), and job labels per project
+  G.edges.forEach(function (e) {
+    var j = nodes[e.from], f = nodes[e.to];
+    if (j && j.type === "job" && f && f.project) { jobProj[f.project] = 1; (jobsOf[f.project] = jobsOf[f.project] || {})[j.label] = j.schedule || ""; }
+  });
+  function hideProject(p) {
+    return (p.archived && !$("f-arch").checked) || ($("f-jobs").checked && !jobProj[p.id]);
+  }
   var expanded = {}, expandedFiles = {}, selected = null, tab = "info", view3d = false, mode = "bd";
   var m = G.meta;
   [["projects", m.projects], ["files", m.files], ["functions", m.functions || 0], ["targets", m.targets], ["edges", m.edges], ["scanned", m.generated]].forEach(function (s) {
@@ -297,7 +338,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       els.push({ group: "nodes", data: d });
     }
     projects.forEach(function (p) {
-      if (p.archived && !showArch) return;
+      if (hideProject(p)) return;
       vis[p.id] = 1;
       if (q && p.id.toLowerCase().indexOf(q) < 0 && !(filesOf[p.id] || []).some(function (f) { return f.id.toLowerCase().indexOf(q) >= 0; })) return;
       vis[p.id] = 2;
@@ -348,6 +389,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
   function renderList() {
     var ul = $("plist"); ul.innerHTML = "";
     projects.forEach(function (p) {
+      if ($("f-jobs").checked && !jobProj[p.id]) return;
       var b = el("button", { "aria-pressed": String(selected === p.id || (nodes[selected] && nodes[selected].project === p.id)), onclick: function () { selectNode(p.id, true); } }, [
         el("span", { class: "nm" + (p.archived ? " arch" : ""), text: p.label }),
         el("span", { class: "n", text: String(p.files) })
@@ -446,7 +488,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       return el("button", { class: "dcard " + cls, onclick: function () { selectNode(id, true); } }, [el("span", { text: label }), el("span", { class: "n", text: String(n) })]);
     }
     var cols = projects.filter(function (p) {
-      if (p.archived && !showArch) return false;
+      if (hideProject(p)) return false;
       return !q || p.id.toLowerCase().indexOf(q) >= 0;
     }).sort(function (x, y) {
       var dx = Object.keys(usedBy[x.id] || {}).length, dy = Object.keys(usedBy[y.id] || {}).length;
@@ -460,14 +502,19 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       if (d.length) { body.appendChild(el("div", { class: "sect", text: "Uses projects (" + d.length + ")" })); d.forEach(function (x) { body.appendChild(card("proj", x, x, deps[id][x])); }); }
       if (t.length) { body.appendChild(el("div", { class: "sect", text: "Uses external (" + t.length + ")" })); t.forEach(function (x) { body.appendChild(card("tg", x, nodes[x].label, tgs[id][x])); }); }
       if (u.length) { body.appendChild(el("div", { class: "sect", text: "Used by (" + u.length + ")" })); u.forEach(function (x) { body.appendChild(card("by", x, x, usedBy[id][x])); }); }
-      if (!d.length && !t.length && !u.length) body.appendChild(el("div", { class: "sub", text: "No links found in the scan." }));
+      var jl = Object.keys(jobsOf[id] || {}).sort();
+      if (jl.length) {
+        body.appendChild(el("div", { class: "sect", text: "Scheduler jobs (" + jl.length + ")" }));
+        jl.forEach(function (x) { body.appendChild(el("button", { class: "dcard jb", title: "Open the Scheduler Job tab", onclick: function () { tab = "jobs"; selectNode(id, false); } }, [el("span", { text: x }), el("span", { class: "n", text: jobsOf[id][x] })])); });
+      }
+      if (!d.length && !t.length && !u.length && !jl.length) body.appendChild(el("div", { class: "sub", text: "No links found in the scan." }));
       var head = el("button", { class: "colh", onclick: function () { selectNode(id, false); } }, [
         el("b", { text: p.label }), el("span", { text: p.files + " files" + (p.archived ? " - archived" : "") + ((hyg[id] || []).length ? " - " + hyg[id].length + " hygiene" : "") })
       ]);
       var parts = [head];
       if (AV) {
         var act = el("div", { class: "colact" });
-        [["chat", "Chat"], ["files", "Files"], ["run", "Scripts"]].forEach(function (t) {
+        [["chat", "Chat"], ["files", "Files"], ["run", "Scripts"], ["jobs", "Jobs"]].forEach(function (t) {
           act.appendChild(el("button", { class: "btn ghost sm", text: t[1], onclick: function () { tab = t[0]; selectNode(id, false); } }));
         });
         parts.push(act);
@@ -500,11 +547,20 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
   function renderPanel() {
     var d = $("detail"); d.innerHTML = "";
     var pid = ctxProject();
+    $("app").classList.toggle("wide", !!(wide && AV && pid));
     if (AV && pid) {
       var tabs = el("div", { class: "tabs", role: "tablist" });
-      [["info", "Info"], ["chat", "Chat"], ["files", "Files"], ["run", "Scripts"]].forEach(function (t) {
+      [["info", "Info"], ["chat", "Chat"], ["files", "Files"], ["run", "Scripts"], ["jobs", "Scheduler Job"]].forEach(function (t) {
         tabs.appendChild(el("button", { role: "tab", "aria-selected": String(tab === t[0]), text: t[1], onclick: function () { tab = t[0]; renderPanel(); } }));
       });
+      tabs.appendChild(el("span", { class: "sp" }));
+      if (wide) {
+        var sw = el("select", { "aria-label": "Switch project" }, projects.filter(function (p) { return !p.archived || p.id === pid; }).map(function (p) { return el("option", { value: p.id, text: p.label }); }));
+        sw.value = pid;
+        sw.addEventListener("change", function () { selectNode(sw.value, false); });
+        tabs.appendChild(sw);
+      }
+      tabs.appendChild(el("button", { class: "btn ghost sm", text: wide ? "Back to map" : "Full width", title: wide ? "Show the map and project list again" : "Use the whole window for this project", onclick: function () { setWide(!wide); renderPanel(); cy.resize(); window.dispatchEvent(new Event("resize")); } }));
       d.appendChild(tabs);
     } else tab = "info";
     var body = el("div", { class: "tabbody" });
@@ -512,8 +568,11 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     if (tab === "chat") body.appendChild(chatPanel(pid));
     else if (tab === "files") body.appendChild(filesPanel(pid));
     else if (tab === "run") body.appendChild(scriptsPanel(pid));
+    else if (tab === "jobs") body.appendChild(jobsPanel(pid));
     else body.appendChild(infoPanel());
   }
+  var wide = store("av.wide") !== "0";   // full-width project view is the default; "Back to map" turns it off
+  function setWide(on) { wide = !!on; store("av.wide", wide ? "1" : "0"); }
 
   function selectNode(id, focus) {
     selected = id; var n = nodes[id];
@@ -531,7 +590,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
   function infoPanel() {
     var n = nodes[selected], d = el("div");
     if (!n) {
-      d.appendChild(el("p", { text: AV ? "Pick a project (column title in Board, or the list on the left). Then the Chat, Files and Scripts tabs appear here. Each Board column also has Chat, Files and Scripts buttons." : "Viewer only: the server is not running, so Chat, Files and Scripts are off. Start it with start.bat (Windows) or ./start.sh." }));
+      d.appendChild(el("p", { text: AV ? "Pick a project (column title in Board, or the list on the left). Then the Chat, Files and Scripts tabs appear here. Each Board column also has Chat, Files and Scripts buttons." : "Viewer only: the server is not running, so Chat, Files and Scripts are off. Start it with start_windows.bat, start_mac.command or start_ubuntu.sh." }));
       d.appendChild(el("p", { class: "sub", text: "Double-click a project in the 2D map to expand its files, a file to expand its functions. Click a file or function to highlight everything that depends on it." }));
       return d;
     }
@@ -596,7 +655,8 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     var c = { pid: pid, box: el("div", { class: "term chatbox", "aria-live": "polite" }), sid: store("av.sid." + pid) || "", runId: null, live: false, busy: false, cur: null, partial: false, tools: {}, mode: AV.readOnly ? "plan" : "acceptEdits", ctx: "full", startMode: null, startCtx: null, checked: false, sync: null };
     chats[pid] = c; return c;
   }
-  function addMsg(c, cls, text) { var e = el("div", { class: "msg " + cls, text: text }); c.box.appendChild(e); c.box.scrollTop = c.box.scrollHeight; return e; }
+  function stick(c, force) { if (force) c.pinned = true; if (c.pinned !== false) c.box.scrollTop = c.box.scrollHeight; }
+  function addMsg(c, cls, text) { var e = el("div", { class: "msg " + cls, text: text }); c.box.appendChild(e); stick(c, cls === "user"); return e; }
   function toolSummary(inp) {
     if (!inp) return "";
     var s = inp.command || inp.file_path || inp.pattern || inp.path || inp.url || inp.description || JSON.stringify(inp);
@@ -616,7 +676,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       if (ev.type === "message_start") { c.cur = null; c.partial = false; }
       else if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") {
         if (!c.cur) c.cur = addMsg(c, "asst", "");
-        c.cur.textContent += ev.delta.text; c.partial = true; c.box.scrollTop = c.box.scrollHeight;
+        c.cur.textContent += ev.delta.text; c.partial = true; stick(c);
       }
     } else if (o.type === "assistant" && o.message && Array.isArray(o.message.content)) {
       o.message.content.forEach(function (b) {
@@ -626,7 +686,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
           c.tools[b.id] = t; c.box.appendChild(t);
         }
       });
-      c.cur = null; c.partial = false; c.box.scrollTop = c.box.scrollHeight;
+      c.cur = null; c.partial = false; stick(c);
     } else if (o.type === "user" && o.message) {
       var ut = userText(o); if (ut) addMsg(c, "user", ut);
       if (Array.isArray(o.message.content)) o.message.content.forEach(function (b) {
@@ -733,8 +793,15 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     ta.addEventListener("keydown", function (e) { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); go(); } });
     if (!c.box.childNodes.length) addMsg(c, "sys", "A live Claude session for " + pid + ". It stays open between messages and keeps its context, like a terminal. Leave the tab and come back, it is still there until you end it.");
     c.sync();
-    [el("div", { class: "row", style: "margin:0" }, [status, psLine]), el("div", { class: "row", style: "margin:0" }, [sel, ctxSel, fresh]), banner, c.box, ta, el("div", { class: "row", style: "margin:0" }, [send, endBtn])].forEach(function (x) { wrap.appendChild(x); });
-    c.box.scrollTop = c.box.scrollHeight;
+    var latest = el("button", { class: "btn sm latest", text: "Latest", title: "Jump to the most recent message", hidden: "hidden", onclick: function () { stick(c, true); c.latestSync(); } });
+    c.latestSync = function () { latest.hidden = c.box.scrollHeight - c.box.scrollTop - c.box.clientHeight < 60; };
+    if (!c.scrollBound) {
+      c.scrollBound = true;
+      c.box.addEventListener("scroll", function () { c.pinned = c.box.scrollHeight - c.box.scrollTop - c.box.clientHeight < 60; if (c.latestSync) c.latestSync(); });
+      new MutationObserver(function () { if (c.latestSync) c.latestSync(); }).observe(c.box, { childList: true, subtree: true, characterData: true });
+    }
+    [el("div", { class: "row", style: "margin:0" }, [status, psLine]), el("div", { class: "row", style: "margin:0" }, [sel, ctxSel, fresh]), banner, el("div", { class: "chatwrap" }, [c.box, latest]), ta, el("div", { class: "row", style: "margin:0" }, [send, endBtn])].forEach(function (x) { wrap.appendChild(x); });
+    stick(c, true); setTimeout(function () { c.latestSync(); }, 0);
     return wrap;
   }
 
@@ -742,20 +809,101 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
   var fileCache = {};
   function filesPanel(pid) {
     var wrap = el("div", { class: "tabbody", style: "gap:8px" });
-    var list = el("div", { class: "card", style: "overflow:auto;flex:1;min-height:120px;margin:0" }), filter = el("input", { type: "search", placeholder: "filter files", "aria-label": "Filter files" });
-    function draw(files) {
-      var q = filter.value.toLowerCase(), ul = el("ul");
-      files.filter(function (f) { return !q || f.path.toLowerCase().indexOf(q) >= 0; }).slice(0, 400).forEach(function (f) {
-        ul.appendChild(el("li", {}, [el("button", { text: f.path, onclick: function () { openEditor(pid, f.path, wrap); } }), el("span", { class: "tag", text: Math.ceil(f.size / 1024) + " KB" })]));
+    var list = el("div", { class: "card dropzone", style: "overflow:auto;flex:1;min-height:120px;margin:0" }), filter = el("input", { type: "search", placeholder: "filter files", "aria-label": "Filter files" });
+    var open = treeOpen[pid] || (treeOpen[pid] = {});
+    function build(files) {   // nested folders: { dirs: {name: node}, files: [file], n: total files below }
+      var root = { dirs: {}, files: [], n: 0 };
+      files.forEach(function (f) {
+        var parts = f.path.split("/"), node = root; root.n++;
+        parts.slice(0, -1).forEach(function (seg) { node = node.dirs[seg] = node.dirs[seg] || { dirs: {}, files: [], n: 0 }; node.n++; });
+        node.files.push({ name: parts[parts.length - 1], path: f.path, size: f.size });
       });
-      list.innerHTML = ""; list.appendChild(ul);
+      return root;
     }
-    if (fileCache[pid]) draw(fileCache[pid]);
-    else { list.textContent = "loading..."; api("/api/files?project=" + encodeURIComponent(pid)).then(function (r) { fileCache[pid] = r.files; draw(r.files); }).catch(function (e) { list.textContent = e.message; }); }
-    filter.addEventListener("input", function () { if (fileCache[pid]) draw(fileCache[pid]); });
-    wrap.appendChild(el("div", { class: "sub", text: AV.readOnly ? "Read-only server: files can be viewed, not saved." : "Click a file to view or edit. Secret files (.env, keys, tokens) are never shown." }));
+    function draw() {
+      var files = fileCache[pid] || [], q = filter.value.toLowerCase();
+      var root = build(files.filter(function (f) { return !q || f.path.toLowerCase().indexOf(q) >= 0; }));
+      function level(node, prefix) {
+        var ul = el("ul", { class: prefix ? "kids" : "tree" });
+        Object.keys(node.dirs).sort(function (a, b) { return a.toLowerCase() < b.toLowerCase() ? -1 : 1; }).forEach(function (name) {
+          var dir = prefix + name, sub = node.dirs[name], isOpen = !!q || !!open[dir];
+          var row = el("div", { class: "trow dir" }, [
+            el("button", { class: "nm", title: dir, "aria-expanded": String(isOpen), text: (isOpen ? "[-] " : "[+] ") + name + "  (" + sub.n + ")", onclick: function () { if (q) return; open[dir] = !open[dir]; draw(); } }),
+            el("button", { class: "go", text: "show", title: "Show this folder in Explorer/Finder", onclick: function () { openOnDisk(pid, dir, "reveal"); } })
+          ]);
+          dropTarget(row, dir);
+          var li = el("li", {}, [row]);
+          if (isOpen) li.appendChild(level(sub, dir + "/"));
+          ul.appendChild(li);
+        });
+        node.files.sort(function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1; }).forEach(function (f) {
+          ul.appendChild(el("li", {}, [el("div", { class: "trow" }, [
+            el("button", { class: "nm", title: f.path, text: f.name, onclick: function () { openEditor(pid, f.path, wrap); } }),
+            el("span", { class: "tag", text: f.size < 1024 ? f.size + " B" : Math.ceil(f.size / 1024) + " KB" })
+          ])]));
+        });
+        return ul;
+      }
+      list.innerHTML = "";
+      if (!files.length) { list.textContent = "No files."; return; }
+      list.appendChild(level(root, ""));
+    }
+    function dropTarget(node, dir) {
+      node.addEventListener("dragover", function (e) { if (!hasFiles(e)) return; e.preventDefault(); e.stopPropagation(); node.classList.add("over"); });
+      node.addEventListener("dragleave", function () { node.classList.remove("over"); });
+      node.addEventListener("drop", function (e) { e.preventDefault(); e.stopPropagation(); node.classList.remove("over"); list.classList.remove("over"); dropFiles(e, dir); });
+    }
+    function dropFiles(e, dir) {
+      if (AV.readOnly) { toast("Read-only server: uploads are disabled"); return; }
+      var items = e.dataTransfer.items, files = [], skipped = 0;
+      for (var i = 0; i < e.dataTransfer.files.length; i++) {
+        var it = items && items[i] && items[i].webkitGetAsEntry ? items[i].webkitGetAsEntry() : null;
+        if (it && it.isDirectory) skipped++; else files.push(e.dataTransfer.files[i]);
+      }
+      if (skipped) toast("Folders are skipped: drop files only");
+      if (!files.length) return;
+      if (!window.confirm("Copy " + files.length + " file" + (files.length > 1 ? "s" : "") + " into " + pid + "/" + (dir || "") + " ?")) return;
+      uploadAll(files, dir, 0, 0);
+    }
+    function uploadAll(files, dir, i, ok) {
+      if (i >= files.length) { delete fileCache[pid]; toast("Copied " + ok + " of " + files.length + " file(s). Rescan to update the map."); load(); return; }
+      var f = files[i];
+      if (f.size > 25000000) { toast(f.name + ": over 25 MB, skipped"); return uploadAll(files, dir, i + 1, ok); }
+      var rd = new FileReader();
+      rd.onload = function () {
+        var data = String(rd.result).split(",")[1] || "";
+        function send(over) {
+          return api("/api/upload", "POST", { project: pid, dir: dir, name: f.name, data: data, overwrite: over }).then(function () { return ok + 1; }, function (err) {
+            if (!over && /already exists/.test(err.message) && window.confirm(f.name + " already exists in " + (dir || "the project root") + ". Replace it? (the old copy is kept under out/backups)")) return send(true);
+            toast(f.name + ": " + err.message); return ok;
+          });
+        }
+        send(false).then(function (n) { uploadAll(files, dir, i + 1, n); });
+      };
+      rd.onerror = function () { toast(f.name + ": could not read"); uploadAll(files, dir, i + 1, ok); };
+      rd.readAsDataURL(f);
+    }
+    function hasFiles(e) { return e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") >= 0; }
+    function load() {
+      if (fileCache[pid]) return draw();
+      list.textContent = "loading...";
+      api("/api/files?project=" + encodeURIComponent(pid)).then(function (r) { fileCache[pid] = r.files; draw(); }).catch(function (e) { list.textContent = e.message; });
+    }
+    list.addEventListener("dragover", function (e) { if (!hasFiles(e)) return; e.preventDefault(); list.classList.add("over"); });
+    list.addEventListener("dragleave", function (e) { if (e.target === list) list.classList.remove("over"); });
+    list.addEventListener("drop", function (e) { e.preventDefault(); list.classList.remove("over"); dropFiles(e, ""); });
+    load();
+    filter.addEventListener("input", draw);
+    wrap.appendChild(el("div", { class: "row", style: "margin:0" }, [
+      el("div", { class: "sub", style: "flex:1", text: (AV.readOnly ? "Read-only server: files can be viewed, not saved or uploaded. " : "Click a file to view or edit. Drag files from Explorer/Finder onto a folder to copy them in (onto the empty area for the project root). ") + "Secret files are never shown." }),
+      el("button", { class: "btn ghost sm", text: "Show project folder", title: "Open the project folder in Explorer/Finder", onclick: function () { openOnDisk(pid, "", "reveal"); } })
+    ]));
     wrap.appendChild(filter); wrap.appendChild(list);
     return wrap;
+  }
+  var treeOpen = {};
+  function openOnDisk(pid, path, mode) {
+    api("/api/open", "POST", { project: pid, path: path, mode: mode }).catch(function (e) { toast(e.message); });
   }
   function openEditor(pid, path, wrap) {
     wrap.innerHTML = "";
@@ -764,7 +912,9 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     var hash = "", dirty = false;
     var save = el("button", { class: "btn", text: "Save", disabled: "disabled" });
     var back = el("button", { class: "btn ghost", text: "Back to files", onclick: function () { if (dirty && !window.confirm("Discard unsaved changes?")) return; renderPanel(); } });
-    wrap.appendChild(el("div", { class: "row", style: "margin:0" }, [back, save]));
+    wrap.appendChild(el("div", { class: "row", style: "margin:0" }, [back, save,
+      el("button", { class: "btn ghost", text: "Open in default app", title: "Open this file with the program your computer uses for it", disabled: AV.readOnly ? "disabled" : false, onclick: function () { openOnDisk(pid, path, "default"); } }),
+      el("button", { class: "btn ghost", text: "Show in folder", title: "Show this file in Explorer/Finder", onclick: function () { openOnDisk(pid, path, "reveal"); } })]));
     wrap.appendChild(el("div", { class: "sub", text: pid + "/" + path }));
     wrap.appendChild(ta); wrap.appendChild(status);
     api("/api/file?project=" + encodeURIComponent(pid) + "&path=" + encodeURIComponent(path)).then(function (r) {
@@ -811,6 +961,115 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       listBox.appendChild(ul);
     }).catch(function (e) { listBox.textContent = e.message; });
     return wrap;
+  }
+
+  /* ---------------------------------------------------------- scheduler jobs */
+  // pid = "" lists every project's jobs. Live data from Windows Task Scheduler via the server.
+  function jobsList(box, pid) {
+    var head = el("div", { class: "row", style: "margin:0 0 8px" });
+    var list = el("div", {});
+    var refresh = el("button", { class: "btn ghost sm", text: "Refresh" });
+    var filter = el("input", { type: "search", placeholder: "filter jobs", "aria-label": "Filter jobs", style: "max-width:240px" });
+    var info = el("span", { class: "sub" });
+    [refresh, filter, info].forEach(function (x) { head.appendChild(x); });
+    box.appendChild(head); box.appendChild(list);
+    var jobs = [];
+    function act(j, action, label) {
+      var msg = label + ' "' + j.label + '"?' + (action === "run" ? "\n\nIt runs " + j.script + " on this computer now, with the task's own account." : "");
+      if (!window.confirm(msg)) return;
+      api("/api/job", "POST", { name: j.name, action: action, confirm: true }).then(function (r) {
+        toast(label + " done" + (r.output ? ": " + r.output : "")); setTimeout(load, action === "run" ? 1500 : 200);
+      }).catch(function (e) { toast(label + " failed: " + e.message); });
+    }
+    function draw() {
+      var q = filter.value.toLowerCase(); list.innerHTML = "";
+      var shown = jobs.filter(function (j) { return !q || (j.label + " " + j.script + " " + j.projects.join(" ")).toLowerCase().indexOf(q) >= 0; });
+      if (!shown.length) { list.appendChild(el("div", { class: "sub", text: jobs.length ? "No job matches the filter." : "No Task Scheduler job runs a scanned file" + (pid ? " of this project." : ".") })); return; }
+      shown.forEach(function (j) {
+        var dl = el("dl", {});
+        [["Schedule", j.schedule], ["Next run", j.next], ["Last run", j.last], ["Last result", j.result], ["Status", j.status], ["Runs", j.script + (pid ? "" : "  (" + j.projects.join(", ") + ")")]].forEach(function (kv) {
+          if (kv[1]) { dl.appendChild(el("dt", { text: kv[0] })); dl.appendChild(el("dd", { text: kv[1] })); }
+        });
+        var ro = AV.readOnly ? "disabled" : false;
+        var btns = el("div", { class: "row", style: "margin:4px 0 0" }, [
+          el("button", { class: "btn sm", text: "Run now", disabled: ro, onclick: function () { act(j, "run", "Run now"); } }),
+          el("button", { class: "btn ghost sm", text: j.enabled ? "Disable" : "Enable", disabled: ro, onclick: function () { act(j, j.enabled ? "disable" : "enable", j.enabled ? "Disable" : "Enable"); } })
+        ]);
+        list.appendChild(el("div", { class: "job" + (j.enabled ? "" : " off") }, [
+          el("h4", {}, [j.label, el("span", { class: "tag" + (j.enabled ? "" : " warn"), text: j.enabled ? "enabled" : "disabled" })]), dl, btns]));
+      });
+    }
+    function load() {
+      info.textContent = "loading Task Scheduler (can take a few seconds)"; refresh.disabled = true;
+      api("/api/jobs?project=" + encodeURIComponent(pid || "")).then(function (r) {
+        jobs = r.jobs; info.textContent = r.note || (jobs.length + " job" + (jobs.length === 1 ? "" : "s")) + (r.readOnly ? ", read-only server" : ""); draw();
+      }).catch(function (e) { info.textContent = "error: " + e.message; }).then(function () { refresh.disabled = false; });
+    }
+    refresh.addEventListener("click", load); filter.addEventListener("input", draw);
+    load();
+  }
+  function jobsPanel(pid) {
+    var wrap = el("div", { class: "tabbody", style: "gap:8px" });
+    wrap.appendChild(el("div", { class: "sub", text: "Windows Task Scheduler jobs that run a file of this project. Run now, Enable and Disable ask for confirmation." }));
+    var box = el("div", { style: "overflow:auto;flex:1;min-height:0" });
+    wrap.appendChild(box); jobsList(box, pid);
+    return wrap;
+  }
+  function openAllJobs() {
+    showModal(function (d) {
+      d.appendChild(el("h2", { id: "mtitle", text: "Scheduler jobs, all projects" }));
+      var box = el("div", {}); d.appendChild(box); jobsList(box, "");
+      d.appendChild(el("div", { class: "row" }, [el("button", { class: "btn ghost", text: "Close", onclick: closeModal })]));
+    });
+  }
+
+  /* ---------------------------------------------------------- update from GitHub */
+  function openUpdate() {
+    showModal(function (d) {
+      d.appendChild(el("h2", { id: "mtitle", text: "Update Agentic View" }));
+      var body = el("div", {}), actions = el("div", { class: "row" });
+      var close = el("button", { class: "btn ghost", text: "Close", onclick: closeModal });
+      d.appendChild(body); d.appendChild(actions);
+      body.appendChild(el("p", { class: "sub", text: "checking GitHub" })); actions.appendChild(close);
+      api("/api/update/check").then(function (u) {
+        body.innerHTML = "";
+        body.appendChild(el("p", {}, ["Installed: ", el("b", { text: "v" + (u.current || "unknown") }), "   Latest: ", el("b", { text: u.latest ? "v" + u.latest : "unknown" })]));
+        if (u.error) { body.appendChild(el("p", { class: "bad", text: u.error })); return; }
+        if (!u.newer) { body.appendChild(el("p", { class: "ok", text: "You are on the latest version." })); return; }
+        if (u.isClone) {
+          body.appendChild(el("p", { text: "This folder is a git clone, so update it with:" }));
+          body.appendChild(el("p", {}, [el("code", { class: "k", text: "git pull" })]));
+          return;
+        }
+        body.appendChild(el("p", { text: "A newer version is available. The update downloads it from github.com/" + u.repo + " and replaces the app files only. Your scan settings (config.local.json), scan results, projects, CLAUDE.md and handover notes are not touched. The old files are saved under out/backups first." }));
+        var go = el("button", { class: "btn", text: "Update to v" + u.latest, disabled: AV.readOnly ? "disabled" : false });
+        if (AV.readOnly) body.appendChild(el("p", { class: "sub", text: "Read-only server: updating is disabled." }));
+        go.addEventListener("click", function () {
+          if (!window.confirm("Download v" + u.latest + " from GitHub, replace the app files and restart the server?\n\nLive chat sessions end now and resume on your next message. This page reloads by itself.")) return;
+          go.disabled = true; close.disabled = true; body.appendChild(el("p", { class: "sub", text: "downloading and installing" }));
+          api("/api/update", "POST", { version: "v" + u.latest, confirm: true }).then(function (r) {
+            body.innerHTML = ""; go.remove();
+            body.appendChild(el("p", { class: "ok", text: "Updated to v" + r.updated + " (" + r.files + " files). Old files saved under " + r.backup + "." }));
+            if (r.pending.length) body.appendChild(el("p", { class: "bad", text: "Could not replace while running: " + r.pending.join(", ") + ". After stopping the server, rename the .av-new copy next to each over the original." }));
+            var st = el("p", { class: "sub", text: "restarting the server, this page reloads by itself" });
+            body.appendChild(st);
+            var t0 = Date.now();
+            (function wait() {
+              setTimeout(function () {
+                fetch("/", { cache: "no-store" }).then(function (x) { return x.text(); }).then(function (h) {
+                  if (h.indexOf('"version": "' + r.updated + '"') >= 0) { st.textContent = "restarted, reloading"; location.reload(); } else again();
+                }).catch(again);
+              }, 1000);
+              function again() {
+                if (Date.now() - t0 > 60000) { st.className = "bad"; st.textContent = "The server did not come back. Run your launcher again (start_windows.bat, start_mac.command or start_ubuntu.sh), then reload this page."; close.disabled = false; return; }
+                wait();
+              }
+            })();
+          }).catch(function (e) { go.disabled = false; close.disabled = false; body.appendChild(el("p", { class: "bad", text: "update failed: " + e.message })); });
+        });
+        actions.insertBefore(go, close);
+      }).catch(function (e) { body.innerHTML = ""; body.appendChild(el("p", { class: "bad", text: "check failed: " + e.message })); });
+    });
   }
 
   /* ---------------------------------------------------------- setup + rescan */
@@ -930,10 +1189,16 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     });
   }
 
+  if (AV && AV.version) document.querySelector("header h1").appendChild(el("small", { text: " v" + AV.version, style: "font-weight:400;color:var(--text-dim)" }));
   if (!AV) $("noserver").hidden = false;
   if (AV) {
     $("b-rescan").hidden = false; $("b-setup").hidden = false; $("b-new").hidden = !!AV.readOnly;
     $("b-new").addEventListener("click", openNewProject);
+    $("b-jobs").hidden = false; $("b-jobs").addEventListener("click", openAllJobs);
+    $("b-update").hidden = false; $("b-update").addEventListener("click", openUpdate);
+    api("/api/update/check").then(function (u) {
+      if (u.newer) { $("b-update").textContent = "Update available (v" + u.latest + ")"; $("b-update").classList.remove("ghost"); }
+    }).catch(function () {});
     $("b-global").hidden = false; $("b-global").addEventListener("click", openGlobal);
     $("b-rescan").addEventListener("click", rescan);
     $("b-setup").addEventListener("click", openSetup);
@@ -947,7 +1212,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
   cy.on("dbltap", "node[type='project']", function (ev) { var id = ev.target.id(); expanded[id] = !expanded[id]; build(); selectNode(id, true); });
   cy.on("dbltap", "node[type='file']", function (ev) { var n = nodes[ev.target.id()]; if ((funcsOf[n.id] || []).length) { expandedFiles[n.id] = !expandedFiles[n.id]; build(); selectNode(n.id, true); } });
   cy.on("tap", function (ev) { if (ev.target === cy) { clearHL(); selected = null; renderList(); renderPanel(); cy.elements().unselect(); } });
-  ["f-shared", "f-env", "f-arch", "f-heur"].forEach(function (i) { $(i).addEventListener("change", build); });
+  ["f-shared", "f-env", "f-arch", "f-heur", "f-jobs"].forEach(function (i) { $(i).addEventListener("change", build); });
   var qt; $("q").addEventListener("input", function () { clearTimeout(qt); qt = setTimeout(build, 200); });
   $("b-expand").addEventListener("click", function () { projects.forEach(function (p) { if ((filesOf[p.id] || []).length < 80) expanded[p.id] = true; }); build(); });
   $("b-collapse").addEventListener("click", function () { expanded = {}; expandedFiles = {}; build(); });

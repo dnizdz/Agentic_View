@@ -40,7 +40,7 @@ DEFAULT_CONFIG = {
     "archive_dir_names": ["Archive", "archive"],
     "include_archive": False,
     "extra_roots": [],
-    "schedule": False,
+    "schedule": True,   # read-only schtasks query; skipped automatically on non-Windows
     "max_text_bytes": 1500000,
     "host_aliases": {},
     "ignore_hosts": [
@@ -854,7 +854,8 @@ def main():
     ap.add_argument("--config", help="path to a JSON config (default: config.local.json if present)")
     ap.add_argument("--root", help="folder whose subfolders are projects (overrides config)")
     ap.add_argument("--archive", action="store_true", help="include Archive folders")
-    ap.add_argument("--schedule", action="store_true", help="read Windows Task Scheduler (read-only)")
+    ap.add_argument("--schedule", action="store_true", help="read Windows Task Scheduler (read-only, on by default)")
+    ap.add_argument("--no-schedule", action="store_true", help="do not read Windows Task Scheduler")
     ap.add_argument("--no-cache", action="store_true")
     args = ap.parse_args()
 
@@ -869,6 +870,8 @@ def main():
         cfg["include_archive"] = True
     if args.schedule:
         cfg["schedule"] = True
+    if args.no_schedule:
+        cfg["schedule"] = False
     roots = [{"path": cfg["root"]}] + [r for r in cfg.get("extra_roots", [])]
     log(f"config: {cfg_path or 'defaults'}; root: {Path(cfg['root']).resolve()}")
 
