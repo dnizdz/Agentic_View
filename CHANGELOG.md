@@ -2,6 +2,10 @@
 
 Versions follow semantic versioning. The current version is in the `VERSION` file and is shown in the page header. Each release is a git tag `vX.Y.Z`.
 
+## 1.5.3 - 2026-10-28
+### Changed
+- The Update button is hidden unless a newer release exists. The version is checked on every page open.
+
 ## 1.5.2 - 2026-10-28
 ### Changed
 - "Back to map" moved to the top left of the project tab bar and is now blue. Tab-bar buttons and the project switcher share one height.
