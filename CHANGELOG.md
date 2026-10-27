@@ -2,6 +2,12 @@
 
 Versions follow semantic versioning. The current version is in the `VERSION` file and is shown in the page header. Each release is a git tag `vX.Y.Z`.
 
+## 1.5.2 - 2026-10-28
+### Changed
+- "Back to map" moved to the top left of the project tab bar and is now blue. Tab-bar buttons and the project switcher share one height.
+- Header buttons share one size (they shrink evenly on narrow windows) and the Board / 2D / 3D toggle keeps its full width. Hidden header buttons stay hidden.
+- The update button reads "Update vX.Y.Z" when a newer version exists.
+
 ## 1.5.1 - 2026-10-27
 ### Changed
 - README: screenshots of the board, 2D map and 3D map use a made-up set of eight demo projects instead of a blurred real one.
