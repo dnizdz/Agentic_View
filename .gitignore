@@ -1,0 +1,42 @@
+# Agent_View: share the tool, never the scanned data.
+# Scan output holds internal project names, hostnames, IPs, sheet IDs, env key names.
+
+# Scan output (graph, impact index, summaries)
+data/
+out/
+graph.json
+impact.json
+INDEX.md
+*.graph.json
+
+# Personal view and manual link overrides (internal names)
+overrides.*
+my_view/
+*.local.*
+
+# Working material, handover, final artifacts (own project data)
+Brief/
+Deliverables/
+Handover/
+
+# Local agent rules (internal). Generic template ships as CLAUDE.example.md
+CLAUDE.md
+!CLAUDE.example.md
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+credentials*.json
+token*.json
+
+# Tooling noise
+__pycache__/
+*.pyc
+node_modules/
+.venv/
+.claude/
+.DS_Store
+Thumbs.db
+*.log
