@@ -30,6 +30,9 @@ header h1 span { color: var(--accent); }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .seg button { background: none; border: 0; padding: 4px 12px; min-height: 30px; color: var(--text-dim); }
 .seg button[aria-pressed=true] { background: var(--muted); color: var(--text); }
+header .btn, .seg button { box-sizing: border-box; height: 32px; min-height: 32px; padding: 0 14px; font-size: 12px; line-height: 1; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; }
+header .btn { width: 124px; flex: none; }
+.seg button { min-width: 56px; }
 aside, section.detail { background: var(--panel); overflow: auto; padding: 12px; }
 aside { border-right: 1px solid var(--border); }
 section.detail { border-left: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
@@ -1201,7 +1204,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     $("b-jobs").hidden = false; $("b-jobs").addEventListener("click", openAllJobs);
     $("b-update").hidden = false; $("b-update").addEventListener("click", openUpdate);
     api("/api/update/check").then(function (u) {
-      if (u.newer) { $("b-update").textContent = "Update available (v" + u.latest + ")"; $("b-update").classList.remove("ghost"); }
+      if (u.newer) { $("b-update").textContent = "Update v" + u.latest; $("b-update").classList.remove("ghost"); }
     }).catch(function () {});
     $("b-global").hidden = false; $("b-global").addEventListener("click", openGlobal);
     $("b-rescan").addEventListener("click", rescan);
