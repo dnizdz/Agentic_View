@@ -101,6 +101,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
 .colh { background: none; border: 0; border-bottom: 1px solid var(--border); text-align: left; padding: 10px 12px; width: 100%; color: var(--text); }
 .colh b { font: 600 13px var(--mono); display: block; word-break: break-word; }
 .colh span { font: 400 11px var(--mono); color: var(--text-dim); }
+.colact { display: flex; gap: 6px; padding: 6px 12px 8px; border-bottom: 1px solid var(--border); }
 .colb { overflow: auto; padding: 4px 8px 10px; }
 .sect { font: 500 11px var(--mono); color: var(--text-dim); text-transform: uppercase; letter-spacing: .08em; margin: 10px 0 4px; }
 .dcard { display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin: 3px 0; min-height: 32px; color: var(--text); word-break: break-word; }
@@ -119,6 +120,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     <div class="seg" role="group" aria-label="View mode"><button id="vbd" aria-pressed="true">Board</button><button id="v2d" aria-pressed="false">2D</button><button id="v3d" aria-pressed="false">3D</button></div>
     <button class="btn ghost sm" id="b-rescan" hidden>Rescan</button>
     <button class="btn ghost sm" id="b-setup" hidden>Claude setup</button>
+    <span class="tag warn" id="noserver" hidden title="Chat, Files and Scripts need the local server">viewer only: run start.bat for chat, files, scripts</span>
     <div class="stats" id="stats" aria-live="polite"></div>
   </header>
   <aside aria-label="Filters and projects">
@@ -429,7 +431,16 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       var head = el("button", { class: "colh", onclick: function () { selectNode(id, false); } }, [
         el("b", { text: p.label }), el("span", { text: p.files + " files" + (p.archived ? " - archived" : "") + ((hyg[id] || []).length ? " - " + hyg[id].length + " hygiene" : "") })
       ]);
-      b.appendChild(el("section", { class: "col" + (p.archived ? " arch" : ""), "data-pid": id }, [head, body]));
+      var parts = [head];
+      if (AV) {
+        var act = el("div", { class: "colact" });
+        [["chat", "Chat"], ["files", "Files"], ["run", "Scripts"]].forEach(function (t) {
+          act.appendChild(el("button", { class: "btn ghost sm", text: t[1], onclick: function () { tab = t[0]; selectNode(id, false); } }));
+        });
+        parts.push(act);
+      }
+      parts.push(body);
+      b.appendChild(el("section", { class: "col" + (p.archived ? " arch" : ""), "data-pid": id }, parts));
     });
     markBoard();
   }
@@ -486,7 +497,12 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
 
   function infoPanel() {
     var n = nodes[selected], d = el("div");
-    if (!n) { d.appendChild(el("p", { class: "sub", text: "Click a project or target for details. Double-click a project to expand its files, a file to expand its functions. Click a file or function to highlight everything that depends on it." })); return d; }
+    if (!n) {
+      d.appendChild(el("p", { text: AV ? "Pick a project (column title in Board, or the list on the left). Then the Chat, Files and Scripts tabs appear here. Each Board column also has Chat, Files and Scripts buttons." : "Viewer only: the server is not running, so Chat, Files and Scripts are off. Start it with start.bat (Windows) or ./start.sh." }));
+      d.appendChild(el("p", { class: "sub", text: "Double-click a project in the 2D map to expand its files, a file to expand its functions. Click a file or function to highlight everything that depends on it." }));
+      return d;
+    }
+    if (AV && !ctxProject()) d.appendChild(el("div", { class: "banner", text: "Chat, Files and Scripts work on a project. Pick a project to use them." }));
     var id = n.id;
     d.appendChild(el("h2", { text: n.type === "project" || n.type === "target" ? n.id : n.label }));
     d.appendChild(el("div", { class: "sub", text: n.type + (n.path ? " - " + n.path : "") + (n.line ? " - line " + n.line : "") + (n.archived ? " - archived" : "") }));
@@ -689,11 +705,11 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
         var runId = null;
         runBtn.addEventListener("click", function () {
           if (!window.confirm("Run " + s.path + " now?\n\nThe script runs on this computer with your permissions.")) return;
-          out.textContent = "$ " + s.path + "\n"; runBtn.disabled = true;
+          out.textContent = "$ " + s.path + "\n[running, waiting for output]\n"; runBtn.disabled = true;
           api("/api/run", "POST", { kind: "script", file_id: s.id, confirm: true }).then(function (rr) {
             runId = rr.id; stopBtn.disabled = false;
             streamRun(rr.id, function (t) { out.appendChild(document.createTextNode(t)); out.scrollTop = out.scrollHeight; },
-              function (code) { out.appendChild(document.createTextNode("\n[exit " + code + "]\n")); out.scrollTop = out.scrollHeight; runBtn.disabled = AV.readOnly; stopBtn.disabled = true; });
+              function (code) { out.appendChild(document.createTextNode("\n[exit " + code + (code === 0 ? ", finished" : "") + "]\n")); out.scrollTop = out.scrollHeight; runBtn.disabled = AV.readOnly; stopBtn.disabled = true; });
           }).catch(function (e) { out.textContent += "error: " + e.message + "\n"; runBtn.disabled = false; });
         });
         stopBtn.addEventListener("click", function () { if (runId) api("/api/run/" + runId + "/stop", "POST", {}); });
@@ -758,6 +774,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     });
   }
 
+  if (!AV) $("noserver").hidden = false;
   if (AV) {
     $("b-rescan").hidden = false; $("b-setup").hidden = false;
     $("b-rescan").addEventListener("click", rescan);
