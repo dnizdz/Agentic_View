@@ -1045,15 +1045,27 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
         var go = el("button", { class: "btn", text: "Update to v" + u.latest, disabled: AV.readOnly ? "disabled" : false });
         if (AV.readOnly) body.appendChild(el("p", { class: "sub", text: "Read-only server: updating is disabled." }));
         go.addEventListener("click", function () {
-          if (!window.confirm("Download v" + u.latest + " from GitHub and replace the app files?")) return;
-          go.disabled = true; body.appendChild(el("p", { class: "sub", text: "downloading and installing" }));
+          if (!window.confirm("Download v" + u.latest + " from GitHub, replace the app files and restart the server?\n\nLive chat sessions end now and resume on your next message. This page reloads by itself.")) return;
+          go.disabled = true; close.disabled = true; body.appendChild(el("p", { class: "sub", text: "downloading and installing" }));
           api("/api/update", "POST", { version: "v" + u.latest, confirm: true }).then(function (r) {
-            body.innerHTML = "";
+            body.innerHTML = ""; go.remove();
             body.appendChild(el("p", { class: "ok", text: "Updated to v" + r.updated + " (" + r.files + " files). Old files saved under " + r.backup + "." }));
             if (r.pending.length) body.appendChild(el("p", { class: "bad", text: "Could not replace while running: " + r.pending.join(", ") + ". After stopping the server, rename the .av-new copy next to each over the original." }));
-            body.appendChild(el("p", { text: "Restart to use the new version: stop this server (press Ctrl+C in its window, or close the window), then run your launcher again (start_windows.bat, start_mac.command or start_ubuntu.sh)." }));
-            go.remove();
-          }).catch(function (e) { go.disabled = false; body.appendChild(el("p", { class: "bad", text: "update failed: " + e.message })); });
+            var st = el("p", { class: "sub", text: "restarting the server, this page reloads by itself" });
+            body.appendChild(st);
+            var t0 = Date.now();
+            (function wait() {
+              setTimeout(function () {
+                fetch("/", { cache: "no-store" }).then(function (x) { return x.text(); }).then(function (h) {
+                  if (h.indexOf('"version": "' + r.updated + '"') >= 0) { st.textContent = "restarted, reloading"; location.reload(); } else again();
+                }).catch(again);
+              }, 1000);
+              function again() {
+                if (Date.now() - t0 > 60000) { st.className = "bad"; st.textContent = "The server did not come back. Run your launcher again (start_windows.bat, start_mac.command or start_ubuntu.sh), then reload this page."; close.disabled = false; return; }
+                wait();
+              }
+            })();
+          }).catch(function (e) { go.disabled = false; close.disabled = false; body.appendChild(el("p", { class: "bad", text: "update failed: " + e.message })); });
         });
         actions.insertBefore(go, close);
       }).catch(function (e) { body.innerHTML = ""; body.appendChild(el("p", { class: "bad", text: "check failed: " + e.message })); });

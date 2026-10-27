@@ -1,5 +1,6 @@
 @echo off
-rem Agentic View: rescan, then start the local server and open the browser.
+rem Agentic View launcher for Windows. Rescans, starts the local server, opens the browser,
+rem and restarts the server by itself after an in-app update (see launcher.py).
 rem Extra flags are passed to the server, e.g.  start_windows.bat --allow-bypass   or   start_windows.bat --read-only
 cd /d "%~dp0"
 where python >nul 2>nul
@@ -8,13 +9,5 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-echo Scanning projects...
-python -I scanner\scan.py
-if errorlevel 1 (
-  echo Scan failed. See the message above.
-  pause
-  exit /b 1
-)
-echo Starting server. Close this window or press Ctrl+C to stop.
-python -I server\server.py --open %*
+python -I launcher.py %*
 pause

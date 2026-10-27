@@ -491,7 +491,7 @@ UPDATE_REPO = "dnizdz/Agentic_View"
 TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 MAX_ZIP = 20_000_000
 UPDATE_DIRS = ("scanner/", "server/", "viewer/")
-UPDATE_ROOT = re.compile(r"^(README\.md|CHANGELOG\.md|VERSION|LICENSE|CLAUDE\.example\.md|architecture\.md|\.gitignore|\.gitattributes|start_[a-z]+\.(bat|command|sh))$")
+UPDATE_ROOT = re.compile(r"^(README\.md|CHANGELOG\.md|VERSION|LICENSE|launcher\.py|CLAUDE\.example\.md|architecture\.md|\.gitignore|\.gitattributes|start_[a-z]+\.(bat|command|sh))$")
 UPDATE_SKIP = re.compile(r"(^|/)(__pycache__/|[^/]*\.local\.[^/]*$|[^/]*\.pyc$)")
 OBSOLETE = ("start.bat", "start.sh")   # replaced by the per-OS launchers in 1.1.0
 U_LOCK = threading.Lock()
@@ -523,6 +523,32 @@ def disk_version():
         return (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     except OSError:
         return VERSION
+
+
+def restart_soon():
+    """Stop live sessions and restart this server on the same port with the new files.
+    Under launcher.py (AV_LAUNCHER=1) exit with code 75 and the launcher starts it again.
+    Started any other way, start a fresh copy ourselves (its bind retries until this process is gone)."""
+    def go():
+        time.sleep(1.5)   # let the HTTP response reach the page first
+        for r in list(S["runs"].values()):
+            r.stop()
+        log("restarting")
+        if os.environ.get("AV_LAUNCHER") == "1":
+            os._exit(75)
+        argv = [sys.executable, "-I", str(ROOT / "server" / "server.py")] + [a for a in sys.argv[1:] if a != "--open"]
+        kw = {"cwd": str(ROOT)}
+        if os.name == "nt":
+            kw["creationflags"] = subprocess.CREATE_NEW_CONSOLE   # its own window, so it can be seen and stopped
+        else:
+            kw["start_new_session"] = True
+        try:
+            subprocess.Popen(argv, **kw)
+        except OSError as e:
+            log(f"restart failed ({type(e).__name__}): start the server again by hand")
+            return
+        os._exit(0)
+    threading.Thread(target=go, daemon=True).start()
 
 
 def update_check():
@@ -588,6 +614,8 @@ def update_apply(b):
         pending, done = [], 0
         for rel, raw in sorted(files.items()):
             target = ROOT / rel
+            if target.exists() and target.read_bytes().replace(b"\r\n", b"\n") == raw.replace(b"\r\n", b"\n"):
+                continue   # unchanged (also keeps a launcher that may be running untouched)
             if target.exists():
                 (bdir / rel).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(target, bdir / rel)
@@ -609,7 +637,9 @@ def update_apply(b):
                     except OSError:
                         pass
         log(f"updated {cur} -> {ver[1:]}: {done} files, {len(pending)} pending")
-        return {"updated": ver[1:], "files": done, "pending": pending, "backup": str(bdir.relative_to(ROOT)).replace("\\", "/")}
+        restart_soon()
+        return {"updated": ver[1:], "files": done, "pending": pending, "restarting": True,
+                "backup": str(bdir.relative_to(ROOT)).replace("\\", "/")}
     finally:
         U_LOCK.release()
 
@@ -1066,7 +1096,18 @@ def main():
     ap.add_argument("--allow-bypass", action="store_true", help="allow the chat toggle that skips all Claude permission checks")
     a = ap.parse_args()
     S.update(token=secrets.token_urlsafe(32), port=a.port, read_only=a.read_only, allow_bypass=a.allow_bypass and not a.read_only)
-    srv = ThreadingHTTPServer(("127.0.0.1", a.port), H)
+    srv = None
+    for attempt in range(40):   # after an update restart the old process may still hold the port for a moment
+        try:
+            srv = ThreadingHTTPServer(("127.0.0.1", a.port), H)
+            break
+        except OSError:
+            if attempt == 0:
+                log(f"port {a.port} is busy, waiting for it to free up")
+            time.sleep(0.5)
+    if srv is None:
+        log(f"port {a.port} stays busy: stop the other program or start with --port <number>")
+        sys.exit(1)
     srv.daemon_threads = True
     url = f"http://127.0.0.1:{a.port}/"
     log(f"Agentic View {VERSION} server on {url}  (read-only={S['read_only']}, allow-bypass={S['allow_bypass']})")

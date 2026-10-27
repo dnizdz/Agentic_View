@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Agentic View launcher for Ubuntu / Debian / other Linux: rescan, then start the local server and open the browser.
+# Agentic View launcher for Ubuntu / Debian / other Linux. Rescans, starts the local server, opens the browser,
+# and restarts the server by itself after an in-app update (see launcher.py).
 # Run:  ./start_ubuntu.sh        (first time: chmod +x start_ubuntu.sh)
 # Extra flags are passed to the server, e.g.  ./start_ubuntu.sh --allow-bypass   or   ./start_ubuntu.sh --read-only
 cd "$(dirname "$0")" || exit 1
@@ -16,7 +17,4 @@ if ! command -v xdg-open >/dev/null 2>&1; then
   echo "xdg-open not found: the browser will not open by itself and the Open file buttons will fail."
   echo "Install it with:  sudo apt install xdg-utils   (then open the address printed below by hand)"
 fi
-echo "Scanning projects..."
-"$PY" -I scanner/scan.py || { echo "Scan failed. See the message above." >&2; exit 1; }
-echo "Starting server. Press Ctrl+C to stop."
-exec "$PY" -I server/server.py --open "$@"
+exec "$PY" -I launcher.py "$@"

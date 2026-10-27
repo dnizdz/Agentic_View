@@ -10,7 +10,8 @@ Agentic View scans a folder of projects (each immediate subfolder is one project
 - `scanner/impact.py` - run manually via `python scanner/impact.py <file>`; reads `out/` and prints what depends on a file.
 - `viewer/index.html` - open directly (map only) or through the server (map plus management tabs); reads `out/graph.js`.
 - `server/server.py` - run manually via `python server/server.py`; binds 127.0.0.1, serves the viewer and the `/api/*` endpoints.
-- `start_windows.bat`, `start_mac.command`, `start_ubuntu.sh` - one launcher per OS: check Python 3.9+, run `scanner/scan.py`, then `server/server.py --open`. Extra flags pass through to the server.
+- `start_windows.bat`, `start_mac.command`, `start_ubuntu.sh` - one launcher per OS: check Python 3.9+, then run `launcher.py`. Extra flags pass through to the server.
+- `launcher.py` - runs `scanner/scan.py`, then `server/server.py` (with `AV_LAUNCHER=1`), and repeats both when the server exits with code 75 (restart requested after an update).
 - `VERSION` - current release number (semantic versioning); read by `server/server.py`, shown in the page header. Release history is in `CHANGELOG.md`; releases are git tags `vX.Y.Z`.
 
 ## Modules
@@ -60,7 +61,7 @@ flowchart LR
 
 ## External system boundaries
 - Windows Task Scheduler: `scan.py` reads task names and commands with `schtasks /query` to mark scheduled scripts (read-only, on by default, skipped on non-Windows). `server.py` also queries it live and, after a confirm in the page, runs `schtasks /run` or `/change /enable|/disable` for tasks that run a scanned file only. Blocked in `--read-only`.
-- GitHub (self-update): `server.py` calls `api.github.com/repos/<repo>/tags` to find the newest `vX.Y.Z` tag, and on confirm downloads `github.com/<repo>/archive/refs/tags/<tag>.zip` (public repo, no credentials, 20 MB cap). It checks the archive layout and that every `.py` compiles, backs up the files it replaces to `out/backups/update-*`, then writes only `scanner/`, `server/`, `viewer/`, launchers and root docs. Local config, `out/` and project folders are never written. Refused in a git clone and in `--read-only`. The repo name is a constant in `server.py`.
+- GitHub (self-update): `server.py` calls `api.github.com/repos/<repo>/tags` to find the newest `vX.Y.Z` tag, and on confirm downloads `github.com/<repo>/archive/refs/tags/<tag>.zip` (public repo, no credentials, 20 MB cap). It checks the archive layout and that every `.py` compiles, backs up the files it replaces to `out/backups/update-*`, then writes only `scanner/`, `server/`, `viewer/`, launchers and root docs. Local config, `out/` and project folders are never written. Refused in a git clone and in `--read-only`. After the swap the server restarts itself: it exits 75 under `launcher.py`, otherwise it starts a fresh copy of itself (new console window on Windows) and exits; the page polls `/` and reloads when the new version answers. The repo name is a constant in `server.py`.
 - OS file manager and default apps: `server.py` asks the OS to show a project file or folder (`explorer /select,`, `open -R`, `xdg-open`) or open it with its default app. Types that would execute when opened (scripts, executables) are refused for the default app.
 - Dropped files: the page reads files dragged from Explorer/Finder and posts them to `/api/upload`; the server writes them inside the target project folder only, refuses secret names and traversal, never replaces without an explicit overwrite (old copy goes to `out/backups/`).
 - CDN (cdnjs, unpkg, Google Fonts): the viewer fetches Cytoscape.js, 3d-force-graph and fonts at page load.
@@ -77,9 +78,9 @@ flowchart LR
 - Chat is a live stream-json session, not a PTY terminal (no slash commands or TUI). The CLI cannot ask the page to approve a tool: denied tools are reported in the chat. Modes are project settings, accept-edits, plan, or bypass (needs `--allow-bypass`). A real terminal (PTY plus xterm.js) is not built.
 - Scheduler jobs cover Windows Task Scheduler only (English column names expected); cron and launchd are not read. Enable, Disable and Run now were not exercised against a real task during development (only the guards and the query were).
 - macOS and Linux launchers and the `open`/`xdg-open` paths are written but were not run on those systems.
-- The updater was tested end to end on Windows only (downloaded the real v1.1.0 tag into a copy of the app). Files locked by a running launcher are written as `.av-new` and listed for a manual rename. It does not delete files that a newer release removed, except the old `start.bat` and `start.sh`.
+- The updater was tested end to end on Windows only (downloaded the real v1.1.0 tag into a copy of the app). Unchanged files are skipped; a file that cannot be replaced is written as `.av-new` and listed for a manual rename. It does not delete files that a newer release removed, except the old `start.bat` and `start.sh`.
 - Dropped folders are skipped (files only). Moving files inside the tree is not built.
 - The server has no multi-user auth. It is for the local machine only.
 
 ## Last checked
-- 2026-10-27 (v1.2.0): module boundaries and external calls checked against scanner/scan.py, scanner/impact.py, server/server.py, viewer/index.html, the three launchers.
+- 2026-10-27 (v1.3.0): module boundaries and external calls checked against scanner/scan.py, scanner/impact.py, server/server.py, viewer/index.html, launcher.py, the three launchers.

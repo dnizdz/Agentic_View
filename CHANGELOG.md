@@ -2,6 +2,13 @@
 
 Versions follow semantic versioning. The current version is in the `VERSION` file and is shown in the page header. Each release is a git tag `vX.Y.Z`.
 
+## 1.3.0 - 2026-10-27
+### Changed
+- The Update button now finishes the whole update by itself: it downloads, replaces the app files, restarts the server and reloads the page. No stopping or relaunching by hand. Live chat sessions end at the restart and resume on the next message.
+- New `launcher.py` does the scan, starts the server and starts it again after an update. The three launchers (`start_windows.bat`, `start_mac.command`, `start_ubuntu.sh`) now only check Python and call it, so they rarely change. The updater skips files whose content is unchanged.
+- The server waits up to 20 seconds for its port after a restart.
+- Upgrading from 1.2.0: the update to 1.3.0 still ends with a manual restart (1.2.0 has no restart step). From 1.3.0 on it is automatic.
+
 ## 1.2.0 - 2026-10-27
 ### Added
 - Update button (header): checks GitHub for the newest tagged version and updates the app by downloading the release zip. No git needed, works the same on Windows, macOS and Ubuntu. Replaces app files only; your `scanner/config.local.json`, `out/`, projects, `CLAUDE.md` and handover notes are never touched, and the replaced files are saved under `out/backups/update-<version>-<time>/`. A git clone is told to use `git pull` instead. Blocked in `--read-only`. After an update, stop the server and run the launcher again.

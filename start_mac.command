@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Agentic View launcher for macOS: rescan, then start the local server and open the browser.
+# Agentic View launcher for macOS. Rescans, starts the local server, opens the browser,
+# and restarts the server by itself after an in-app update (see launcher.py).
 # Double-click this file in Finder (a Terminal window opens), or run:  ./start_mac.command
 # First time only, if macOS blocks it: right-click the file, choose Open, then confirm. Or run:  chmod +x start_mac.command
 # Extra flags are passed to the server, e.g.  ./start_mac.command --allow-bypass   or   ./start_mac.command --read-only
@@ -15,8 +16,5 @@ if ! "$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)'; th
   read -r -p "Press Enter to close." _
   exit 1
 fi
-echo "Scanning projects..."
-"$PY" -I scanner/scan.py || { echo "Scan failed. See the message above." >&2; read -r -p "Press Enter to close." _; exit 1; }
-echo "Starting server. Close this window or press Ctrl+C to stop."
-"$PY" -I server/server.py --open "$@"
+"$PY" -I launcher.py "$@"
 read -r -p "Server stopped. Press Enter to close." _
