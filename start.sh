@@ -14,4 +14,4 @@ fi
 echo "Scanning projects..."
 "$PY" -I scanner/scan.py || { echo "Scan failed. See the message above." >&2; exit 1; }
 echo "Starting server. Press Ctrl+C to stop."
-exec "$PY" -I server/server.py --open "$@"
+exec "$PY" -I server/server.py --open --allow-edit "$@"

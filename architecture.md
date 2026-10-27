@@ -24,6 +24,7 @@ Module-level detail: the project is four small files, each documented by its pub
 ### server/server.py
 - Purpose: local HTTP server (standard library). Keeps a live `claude` session per project (stream-json over stdin/stdout, replayable), creates new projects (folder, CLAUDE.md goal/tasks/related, Handover, architecture stub), runs and stops scanned scripts, reads and writes project files, reruns the scanner, runs the Claude install and sign-in.
 - Cross-module calls: imports `scanner/scan.py` for config defaults and the secret-file globs; reads `out/graph.json` to map project and file ids to folders; starts `scanner/scan.py` as a subprocess; writes file edits and backups (`out/backups/`).
+- Flags: `--read-only`, `--allow-bypass`, `--allow-edit` (adds `--allowedTools "Bash(python *)" "PowerShell(python *)"` to non-plan, non-bypass chat sessions).
 - Depends on (this codebase): `scanner/scan.py`, `out/graph.json`.
 - Called by / Depended on by (this codebase): `viewer/index.html` calls its `/api/*` endpoints.
 - External: spawns one long-lived `claude` process per live session and `claude auth login` for sign-in; runs the official Claude installer command (fixed per OS, only after the page echoes it back); runs scanned scripts with the local interpreter.

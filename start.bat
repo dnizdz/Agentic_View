@@ -24,5 +24,5 @@ if errorlevel 1 (
   exit /b 1
 )
 echo Starting server. Close this window or press Ctrl+C to stop.
-python -I server\server.py --open %*
+python -I server\server.py --open --allow-edit %*
 pause
