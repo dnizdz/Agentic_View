@@ -94,6 +94,11 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
 .modal.on { display: flex; }
 .dlg { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; width: min(640px, 100%); max-height: 90vh; overflow: auto; padding: 18px; }
 .dlg h2 { font-size: 16px; margin-bottom: 10px; }
+#lbl3d { position: absolute; inset: 0; overflow: hidden; pointer-events: none; display: none; z-index: 1; }
+#lbl3d span { position: absolute; left: 0; top: 0; white-space: nowrap; font: 500 11px var(--mono); color: #e2e8f0; text-shadow: 0 0 3px #0b1220, 0 0 3px #0b1220, 0 0 6px #0b1220; will-change: transform; }
+#lbl3d span.project { font-weight: 600; font-size: 12px; color: #86efac; }
+#lbl3d span.target { color: #d8b4fe; }
+#lbl3d span.file, #lbl3d span.function { font-size: 10px; color: #bfdbfe; }
 #board { position: absolute; inset: 0; display: none; gap: 12px; padding: 12px; overflow-x: auto; align-items: flex-start; }
 .col { flex: 0 0 270px; max-height: 100%; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
 .col.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
@@ -139,6 +144,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     <div id="cy" role="img" aria-label="Dependency graph of projects"></div>
     <div id="g3d" role="img" aria-label="3D dependency graph"></div>
     <div id="board" aria-label="Project board"></div>
+    <div id="lbl3d" aria-hidden="true"></div>
     <div class="legend" aria-hidden="true">
       <span><i style="border-color:var(--imports)"></i>imports</span>
       <span><i style="border-color:var(--calls)"></i>calls</span>
@@ -375,13 +381,37 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
         .onNodeClick(function (n) { selectNode(n.id, false); });
     }
     fg3d.width($("viewport").clientWidth).height($("viewport").clientHeight).graphData({ nodes: ns, links: ls });
+    buildLabels3d(ns);
   }
+  var lbl3d = [];
+  function buildLabels3d(ns) {
+    var box = $("lbl3d"); box.innerHTML = ""; lbl3d = [];
+    var all = ns.length <= 120;
+    ns.forEach(function (n) {
+      if (!all && n.type !== "project" && n.type !== "target" && n.type !== "job") return;
+      var sp = el("span", { class: n.type, text: n.label });
+      box.appendChild(sp); lbl3d.push({ n: n, el: sp });
+    });
+  }
+  function updateLabels3d() {
+    if (!view3d || !fg3d || !fg3d.graph2ScreenCoords) return;
+    for (var i = 0; i < lbl3d.length; i++) {
+      var o = lbl3d[i], n = o.n;
+      if (typeof n.x !== "number") { o.el.style.display = "none"; continue; }
+      var c = fg3d.graph2ScreenCoords(n.x, n.y, n.z), w = $("viewport").clientWidth, h = $("viewport").clientHeight;
+      if (!c || c.x < -40 || c.y < -20 || c.x > w + 40 || c.y > h + 20) { o.el.style.display = "none"; continue; }
+      o.el.style.display = "block";
+      o.el.style.transform = "translate(" + Math.round(c.x + 8) + "px," + Math.round(c.y - 6) + "px)";
+    }
+  }
+  (function loop3d() { updateLabels3d(); requestAnimationFrame(loop3d); })();
   function setMode(m) {
     mode = m; view3d = m === "3d";
     ["2d", "3d", "bd"].forEach(function (k) { $("v" + k).setAttribute("aria-pressed", String(k === m)); });
     $("cy").style.visibility = m === "2d" ? "visible" : "hidden";
     $("g3d").style.display = m === "3d" ? "block" : "none";
     $("board").style.display = m === "bd" ? "flex" : "none";
+    $("lbl3d").style.display = m === "3d" ? "block" : "none";
     document.querySelector(".legend").style.display = m === "bd" ? "none" : "flex";
     if (m === "3d") render3d(); else if (m === "bd") renderBoard(); else cy.resize();
   }
