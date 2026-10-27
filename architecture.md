@@ -18,7 +18,7 @@ Agentic View scans a folder of projects (each immediate subfolder is one project
 Module-level detail: the project is four small files, each documented by its public behaviour.
 
 ### scanner/scan.py
-- Purpose: discover files, parse them, resolve links (file imports, Python function calls, shell runs, cross-project paths), write outputs.
+- Purpose: discover files, parse them, resolve links (file imports, Python function calls, shell runs, cross-project paths), write outputs. First run in a terminal with no config asks for the projects folder and writes `scanner/config.local.json` (`first_run_setup`). Skips its own folder, and exits 1 with a message when the root has no projects.
 - Cross-module calls: writes `out/graph.json`, `out/graph.js`, `out/impact.json`, `out/INDEX.md`, `out/cache.json`.
 - Depends on (this codebase): none (Python standard library only).
 - Called by / Depended on by (this codebase): `scanner/impact.py` and `viewer/index.html` read its output files.
@@ -27,6 +27,7 @@ Module-level detail: the project is four small files, each documented by its pub
 ### server/server.py
 - Purpose: local HTTP server (standard library). Keeps a live `claude` session per project (stream-json over stdin/stdout, replayable), creates new projects (folder, CLAUDE.md goal/tasks/related, Handover, architecture stub), runs and stops scanned scripts, reads and writes project files, copies dropped files into a project (`/api/upload`), opens a file or folder in the OS file manager or default app (`/api/open`), lists and controls Windows Task Scheduler jobs (`/api/jobs`, `/api/job`), checks for and installs a newer release from GitHub without git (`/api/update/check`, `/api/update`), reruns the scanner, runs the Claude install and sign-in.
 - Cross-module calls: imports `scanner/scan.py` for config defaults and the secret-file globs; reads `out/graph.json` to map project and file ids to folders; starts `scanner/scan.py` as a subprocess; writes file edits and backups (`out/backups/`).
+- Flags: `--read-only`, `--allow-bypass`, `--allow-edit` (adds `--allowedTools "Bash(python *)" "PowerShell(python *)"` to non-plan, non-bypass chat sessions).
 - Depends on (this codebase): `scanner/scan.py`, `out/graph.json`.
 - Called by / Depended on by (this codebase): `viewer/index.html` calls its `/api/*` endpoints.
 - External: spawns one long-lived `claude` process per live session and `claude auth login` for sign-in; runs the official Claude installer command (fixed per OS, only after the page echoes it back); runs scanned scripts with the local interpreter; runs `schtasks` (query, run, change enable/disable) and the OS opener (`explorer`, `os.startfile`, `open`, `xdg-open`).
@@ -83,4 +84,4 @@ flowchart LR
 - The server has no multi-user auth. It is for the local machine only.
 
 ## Last checked
-- 2026-10-27 (v1.3.0): module boundaries and external calls checked against scanner/scan.py, scanner/impact.py, server/server.py, viewer/index.html, launcher.py, the three launchers.
+- 2026-10-27 (v1.4.0): module boundaries and external calls checked against scanner/scan.py, scanner/impact.py, server/server.py, viewer/index.html, launcher.py, the three launchers.

@@ -59,7 +59,11 @@ OUT_FILES = {"graph.js", "graph.json", "impact.json", "INDEX.md"}
 SID_RE = re.compile(r"^[0-9a-fA-F-]{36}$")
 MODEL_RE = re.compile(r"^[A-Za-z0-9._\[\]-]{1,60}$")
 
-S = {"token": "", "port": 0, "read_only": False, "allow_bypass": False,
+# --allow-edit: on top of the Accept edits mode, chat may run python without asking
+# (the rule form differs per shell tool, so both are listed).
+ALLOW_EDIT_TOOLS = ["Bash(python *)", "PowerShell(python *)"]
+
+S = {"token": "", "port": 0, "read_only": False, "allow_bypass": False, "allow_edit": False,
      "runs": {}, "graph": None, "graph_mtime": 0}
 S_LOCK = threading.Lock()
 
@@ -1038,6 +1042,8 @@ class H(BaseHTTPRequestHandler):
             argv.append("--dangerously-skip-permissions")
         elif mode != "project":
             return (400, "unknown mode")
+        if S["allow_edit"] and mode != "plan" and mode != "bypass":
+            argv += ["--allowedTools", *ALLOW_EDIT_TOOLS]
         ctx = b.get("context", "full")
         if ctx == "lean":
             argv += ["--setting-sources", "project,local"]
@@ -1094,8 +1100,10 @@ def main():
     ap.add_argument("--open", action="store_true", help="open the browser")
     ap.add_argument("--read-only", action="store_true", help="no file edits, no script runs, no install, plan-mode chat only")
     ap.add_argument("--allow-bypass", action="store_true", help="allow the chat toggle that skips all Claude permission checks")
+    ap.add_argument("--allow-edit", action="store_true", help="chat may also run python without asking (on top of Accept edits); ignored with --read-only")
     a = ap.parse_args()
-    S.update(token=secrets.token_urlsafe(32), port=a.port, read_only=a.read_only, allow_bypass=a.allow_bypass and not a.read_only)
+    S.update(token=secrets.token_urlsafe(32), port=a.port, read_only=a.read_only, allow_bypass=a.allow_bypass and not a.read_only,
+             allow_edit=a.allow_edit and not a.read_only)
     srv = None
     for attempt in range(40):   # after an update restart the old process may still hold the port for a moment
         try:
@@ -1110,7 +1118,7 @@ def main():
         sys.exit(1)
     srv.daemon_threads = True
     url = f"http://127.0.0.1:{a.port}/"
-    log(f"Agentic View {VERSION} server on {url}  (read-only={S['read_only']}, allow-bypass={S['allow_bypass']})")
+    log(f"Agentic View {VERSION} server on {url}  (read-only={S['read_only']}, allow-edit={S['allow_edit']}, allow-bypass={S['allow_bypass']})")
     log("Local only. Press Ctrl+C to stop.")
     if a.open:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()

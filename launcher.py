@@ -14,7 +14,7 @@ RESTART_CODE = 75   # server.py exits with this after an update
 
 
 def main():
-    args = sys.argv[1:]
+    args = ["--allow-edit"] + sys.argv[1:]   # chat may run python without asking; the server ignores it with --read-only
     first = True
     while True:
         print("Scanning projects...", flush=True)

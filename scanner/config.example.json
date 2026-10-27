@@ -1,5 +1,5 @@
 {
-  "root": "/path/to/your/projects",
+  "root": "C:/Users/you/Projects",
   "exclude_projects": ["some_folder_to_skip"],
   "include_archive": false,
   "schedule": true,

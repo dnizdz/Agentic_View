@@ -17,4 +17,8 @@ if ! command -v xdg-open >/dev/null 2>&1; then
   echo "xdg-open not found: the browser will not open by itself and the Open file buttons will fail."
   echo "Install it with:  sudo apt install xdg-utils   (then open the address printed below by hand)"
 fi
+if ! command -v claude >/dev/null 2>&1; then
+  echo "Note: Claude Code is not installed. The map and board work without it. Chat needs it:"
+  echo "open the server page and use Setup to install and sign in."
+fi
 exec "$PY" -I launcher.py "$@"

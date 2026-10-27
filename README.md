@@ -2,6 +2,16 @@
 
 Scan a folder of projects and see how they connect. Agentic View builds a dependency map (imports, function calls, scripts that run other scripts, projects that read each other's files, shared external systems) and lets you manage those projects from one page.
 
+![Board view, project and host names blurred](docs/board.png)
+
+## Why
+Each project has its own focus and its own tasks, so an agent working on one should not load the others. Agentic View keeps agents small to cut token usage:
+
+- The map shows which projects, files and functions are related, so an agent reads only what the task touches instead of the whole folder.
+- `impact.py` and `out/INDEX.md` answer "what depends on this?" without opening code.
+- Chat runs one live session per project, scoped to that project's folder and `CLAUDE.md`, with a lean context option that skips global settings and memory.
+
+## What it does
 - **Board:** a kanban-style view, one column per project, with cards for the projects and external systems it uses and the projects that use it.
 - **Map:** interactive 2D graph (project, then file, then function) and a 3D view, with impact highlighting.
 - **For agents:** `impact.py` answers "what depends on this file?", plus `out/graph.json`, `out/impact.json` and `out/INDEX.md`.
@@ -10,7 +20,9 @@ Scan a folder of projects and see how they connect. Agentic View builds a depend
 The scanner is read-only and never opens `.env` files (env key names found in code are recorded, values are not).
 
 ## Requirements
-Python 3.9+ (standard library only) and a modern browser. The page loads Cytoscape.js, 3d-force-graph and fonts from public CDNs. Chat needs Claude Code (the Setup screen can install it).
+- **Python 3.9+** (standard library only). Windows: install from python.org and tick "Add python.exe to PATH", or run `winget install Python.Python.3`. Developed and tested on Python 3.13.
+- **A modern browser.** The page loads Cytoscape.js, 3d-force-graph and fonts from public CDNs.
+- **Claude Code** (only for chat). The map, board and scripts work without it. Install and sign in from the Setup screen in the page, or install it yourself first.
 
 ## Quick start
 ```
@@ -35,7 +47,9 @@ The current version is in `VERSION` (shown in the page header). See `CHANGELOG.m
 
 **Updating without git:** click **Update** in the page header. It checks GitHub for the newest version tag, and on your confirmation downloads that release as a zip, replaces the app files (`scanner/`, `server/`, `viewer/`, launcher, docs), restarts the server and reloads the page, all by itself. Your `scanner/config.local.json`, `out/`, projects, `CLAUDE.md` and handover notes are not touched, and the old files are saved under `out/backups/update-*`. Live chat sessions end at the restart and resume on your next message. The restart is automatic when you started the app with a launcher (`start_windows.bat`, `start_mac.command`, `start_ubuntu.sh`); if you started `server/server.py` by hand, it starts a fresh copy itself (on Windows in a new console window). If you installed with `git clone`, use `git pull` instead (the button says so). To install the first time without git, use GitHub's green **Code** button, then **Download ZIP**, unzip, and run your launcher. The update needs internet access to github.com and, on macOS, the Python certificates installed (run `Install Certificates.command` from the Python folder in Applications if it reports a certificate error).
 
-For a persistent setup, copy `scanner/config.example.json` to `scanner/config.local.json` (gitignored).
+On the first run in a terminal, the scanner asks which folder holds your projects (Enter accepts the parent of this folder) and saves `scanner/config.local.json` (gitignored). To set it by hand, copy `scanner/config.example.json`.
+
+**Scan root rule:** `root` is a folder whose subfolders are the projects. Agentic View skips its own folder automatically, so it can sit inside the scanned folder or elsewhere. In JSON, write Windows paths with forward slashes (`"C:/Users/you/Projects"`) or doubled backslashes. If the root has no project subfolders, the scan stops with "No projects found in <path>".
 
 Scanner options: `--archive` includes `Archive/` folders, `--no-schedule` skips Windows Task Scheduler (read on Windows by default, read-only), `--no-cache` forces a full rescan.
 
@@ -47,7 +61,8 @@ Scanner options: `--archive` includes `Archive/` folders, `--no-schedule` skips 
 - File edits stay inside the project folder, refuse secret files (`.env`, keys, tokens), and keep the previous version under `out/backups/`.
 - Scripts run only if they appear in the scan, with no arguments, after a confirm dialog.
 - Chat is a **live session**: one `claude` process per project stays open between messages (stream-json in and out), keeps its context like a terminal, survives page reloads (the transcript replays when you come back), and ends only when you press End session or stop the server. A mode or context change restarts it and resumes the same conversation. Up to 6 sessions at once.
-- The permission mode follows that project's own Claude settings by default. You can switch to accept-edits or plan-only. Tools that need approval are denied and listed in the chat (the CLI cannot ask the page). "Bypass ALL permissions" (`--dangerously-skip-permissions`) only works if you start the server with `--allow-bypass`, and asks for confirmation.
+- **`--allow-edit`** (on by default in the launchers, ignored with `--read-only`): on top of Accept edits, chat may run `python ...` without asking. Anything else that needs approval (other commands) is still denied and listed. Note that `python *` can run any Python code, so use it only on projects you trust. If you run `python server/server.py` yourself, add the flag to get the same behaviour.
+- New chats start in **Accept edits** (Claude edits files in the project without asking; on a `--read-only` server they start in plan-only). You can switch to follow-project-settings or plan-only. Tools that need approval are denied and listed in the chat (the CLI cannot ask the page). "Bypass ALL permissions" (`--dangerously-skip-permissions`) only works if you start the server with `--allow-bypass`, and asks for confirmation.
 - **Context: full or lean.** Full loads your global Claude settings, memory and hooks on every cold start (about 45k tokens). Lean (`--setting-sources project,local`) loads only the project's settings and costs roughly half on a cold message. A warm live session is much cheaper per turn than a fresh call.
 - **New project** (header button): creates `Brief/`, `Deliverables/`, `Handover/`, `CLAUDE.md` (Goal, Tasks, Related projects, Rules), a Handover with one entry per task, and an `architecture.md` stub, then rescans and opens the project's chat with a starter prompt. Projects listed under "Related projects" in a `CLAUDE.md` show up as `declared` dependencies, so an agent can see what the new project needs from the others.
 - **Global CLAUDE.md** (header button): view and edit `~/.claude/CLAUDE.md` only. It asks for confirmation, refuses to overwrite if the file changed on disk, and keeps the previous version under `out/backups/global`. It is blocked in `--read-only`. It affects every Claude session, so live sessions need a restart to pick up changes.

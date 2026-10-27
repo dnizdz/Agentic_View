@@ -2,6 +2,11 @@
 
 Versions follow semantic versioning. The current version is in the `VERSION` file and is shown in the page header. Each release is a git tag `vX.Y.Z`.
 
+## 1.4.0 - 2026-10-27
+### Added
+- Merged from the setup-friendly-defaults work: first run in a terminal asks for the projects folder and saves `scanner/config.local.json`; the scanner skips its own folder and says so when the root has no projects; chat defaults to Accept edits; `--allow-edit` lets chat run python without asking (on by default in the launchers, ignored with `--read-only`); README explains the purpose and shows a screenshot.
+- Launchers print a note when Claude Code is not installed, and a clearer message when Python is missing.
+
 ## 1.3.0 - 2026-10-27
 ### Changed
 - The Update button now finishes the whole update by itself: it downloads, replaces the app files, restarts the server and reloads the page. No stopping or relaunching by hand. Live chat sessions end at the restart and resume on the next message.

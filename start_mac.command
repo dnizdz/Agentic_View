@@ -16,5 +16,9 @@ if ! "$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)'; th
   read -r -p "Press Enter to close." _
   exit 1
 fi
+if ! command -v claude >/dev/null 2>&1; then
+  echo "Note: Claude Code is not installed. The map and board work without it. Chat needs it:"
+  echo "open the server page and use Setup to install and sign in."
+fi
 "$PY" -I launcher.py "$@"
 read -r -p "Server stopped. Press Enter to close." _
