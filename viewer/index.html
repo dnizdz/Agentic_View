@@ -94,6 +94,19 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
 .modal.on { display: flex; }
 .dlg { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; width: min(640px, 100%); max-height: 90vh; overflow: auto; padding: 18px; }
 .dlg h2 { font-size: 16px; margin-bottom: 10px; }
+#board { position: absolute; inset: 0; display: none; gap: 12px; padding: 12px; overflow-x: auto; align-items: flex-start; }
+.col { flex: 0 0 270px; max-height: 100%; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+.col.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.col.arch { opacity: .75; }
+.colh { background: none; border: 0; border-bottom: 1px solid var(--border); text-align: left; padding: 10px 12px; width: 100%; color: var(--text); }
+.colh b { font: 600 13px var(--mono); display: block; word-break: break-word; }
+.colh span { font: 400 11px var(--mono); color: var(--text-dim); }
+.colb { overflow: auto; padding: 4px 8px 10px; }
+.sect { font: 500 11px var(--mono); color: var(--text-dim); text-transform: uppercase; letter-spacing: .08em; margin: 10px 0 4px; }
+.dcard { display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin: 3px 0; min-height: 32px; color: var(--text); word-break: break-word; }
+.dcard:hover { border-color: var(--text-dim); }
+.dcard.proj { border-left: 3px solid var(--accent); } .dcard.tg { border-left: 3px solid var(--target); } .dcard.by { border-left: 3px solid var(--imports); }
+.dcard .n { font: 400 11px var(--mono); color: var(--text-dim); flex: none; }
 .ok { color: var(--accent); } .bad { color: var(--danger); }
 @media (max-width: 1000px) { .app { grid-template-columns: 1fr; grid-template-rows: 48px 40vh 1fr auto; } aside, section.detail { max-height: 40vh; } .legend { left: 12px; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
@@ -103,7 +116,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
 <div class="app" id="app">
   <header>
     <h1>agentic<span>_</span>view</h1>
-    <div class="seg" role="group" aria-label="View mode"><button id="v2d" aria-pressed="true">2D</button><button id="v3d" aria-pressed="false">3D</button></div>
+    <div class="seg" role="group" aria-label="View mode"><button id="vbd" aria-pressed="true">Board</button><button id="v2d" aria-pressed="false">2D</button><button id="v3d" aria-pressed="false">3D</button></div>
     <button class="btn ghost sm" id="b-rescan" hidden>Rescan</button>
     <button class="btn ghost sm" id="b-setup" hidden>Claude setup</button>
     <div class="stats" id="stats" aria-live="polite"></div>
@@ -123,6 +136,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
   <main id="viewport">
     <div id="cy" role="img" aria-label="Dependency graph of projects"></div>
     <div id="g3d" role="img" aria-label="3D dependency graph"></div>
+    <div id="board" aria-label="Project board"></div>
     <div class="legend" aria-hidden="true">
       <span><i style="border-color:var(--imports)"></i>imports</span>
       <span><i style="border-color:var(--calls)"></i>calls</span>
@@ -212,7 +226,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     else if (n.type === "function") (funcsOf[n.file] = funcsOf[n.file] || []).push(n);
   });
   var linked = {}; G.edges.forEach(function (e) { linked[e.from] = linked[e.to] = 1; });
-  var expanded = {}, expandedFiles = {}, selected = null, tab = "info", view3d = false;
+  var expanded = {}, expandedFiles = {}, selected = null, tab = "info", view3d = false, mode = "bd";
   var m = G.meta;
   [["projects", m.projects], ["files", m.files], ["functions", m.functions || 0], ["targets", m.targets], ["edges", m.edges], ["scanned", m.generated]].forEach(function (s) {
     $("stats").appendChild(el("span", {}, [s[0] + " ", el("b", { text: String(s[1]) })]));
@@ -317,6 +331,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     cy.fit(undefined, 30);
     renderList();
     if (view3d) render3d();
+    if (mode === "bd") renderBoard();
   }
 
   function renderList() {
@@ -359,14 +374,70 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     }
     fg3d.width($("viewport").clientWidth).height($("viewport").clientHeight).graphData({ nodes: ns, links: ls });
   }
-  function setView(is3d) {
-    view3d = is3d;
-    $("v2d").setAttribute("aria-pressed", String(!is3d)); $("v3d").setAttribute("aria-pressed", String(is3d));
-    $("cy").style.visibility = is3d ? "hidden" : "visible"; $("g3d").style.display = is3d ? "block" : "none";
-    if (is3d) render3d(); else cy.resize();
+  function setMode(m) {
+    mode = m; view3d = m === "3d";
+    ["2d", "3d", "bd"].forEach(function (k) { $("v" + k).setAttribute("aria-pressed", String(k === m)); });
+    $("cy").style.visibility = m === "2d" ? "visible" : "hidden";
+    $("g3d").style.display = m === "3d" ? "block" : "none";
+    $("board").style.display = m === "bd" ? "flex" : "none";
+    document.querySelector(".legend").style.display = m === "bd" ? "none" : "flex";
+    if (m === "3d") render3d(); else if (m === "bd") renderBoard(); else cy.resize();
   }
-  $("v2d").addEventListener("click", function () { setView(false); });
-  $("v3d").addEventListener("click", function () { setView(true); });
+  $("v2d").addEventListener("click", function () { setMode("2d"); });
+  $("v3d").addEventListener("click", function () { setMode("3d"); });
+  $("vbd").addEventListener("click", function () { setMode("bd"); });
+
+  /* ---------------------------------------------------------- board view */
+  function renderBoard() {
+    var b = $("board"); b.innerHTML = "";
+    var showShared = $("f-shared").checked, showEnv = $("f-env").checked, showArch = $("f-arch").checked, showHeur = $("f-heur").checked;
+    var q = $("q").value.trim().toLowerCase();
+    var deps = {}, tgs = {}, usedBy = {};
+    G.edges.forEach(function (e) {
+      if (!showHeur && (e.confidence === "heuristic" || e.confidence === "doc")) return;
+      var a = nodes[e.from], t = nodes[e.to];
+      if (!a || !t || !a.project) return;
+      var pa = a.project;
+      if (t.type === "target") {
+        if (t.tkind === "env" && !showEnv) return;
+        if (showShared && Object.keys(tUsers[t.id] || {}).length < 2) return;
+        tgs[pa] = tgs[pa] || {}; tgs[pa][t.id] = (tgs[pa][t.id] || 0) + 1;
+      } else if (t.project && t.project !== pa) {
+        deps[pa] = deps[pa] || {}; deps[pa][t.project] = (deps[pa][t.project] || 0) + 1;
+        usedBy[t.project] = usedBy[t.project] || {}; usedBy[t.project][pa] = (usedBy[t.project][pa] || 0) + 1;
+      }
+    });
+    function card(cls, id, label, n) {
+      return el("button", { class: "dcard " + cls, onclick: function () { selectNode(id, true); } }, [el("span", { text: label }), el("span", { class: "n", text: String(n) })]);
+    }
+    var cols = projects.filter(function (p) {
+      if (p.archived && !showArch) return false;
+      return !q || p.id.toLowerCase().indexOf(q) >= 0;
+    }).sort(function (x, y) {
+      var dx = Object.keys(usedBy[x.id] || {}).length, dy = Object.keys(usedBy[y.id] || {}).length;
+      return dy - dx || (x.id.toLowerCase() < y.id.toLowerCase() ? -1 : 1);
+    });
+    cols.forEach(function (p) {
+      var id = p.id, body = el("div", { class: "colb" });
+      var d = Object.keys(deps[id] || {}).sort(function (a, c) { return deps[id][c] - deps[id][a]; });
+      var t = Object.keys(tgs[id] || {}).sort(function (a, c) { return tgs[id][c] - tgs[id][a]; });
+      var u = Object.keys(usedBy[id] || {}).sort(function (a, c) { return usedBy[id][c] - usedBy[id][a]; });
+      if (d.length) { body.appendChild(el("div", { class: "sect", text: "Uses projects (" + d.length + ")" })); d.forEach(function (x) { body.appendChild(card("proj", x, x, deps[id][x])); }); }
+      if (t.length) { body.appendChild(el("div", { class: "sect", text: "Uses external (" + t.length + ")" })); t.forEach(function (x) { body.appendChild(card("tg", x, nodes[x].label, tgs[id][x])); }); }
+      if (u.length) { body.appendChild(el("div", { class: "sect", text: "Used by (" + u.length + ")" })); u.forEach(function (x) { body.appendChild(card("by", x, x, usedBy[id][x])); }); }
+      if (!d.length && !t.length && !u.length) body.appendChild(el("div", { class: "sub", text: "No links found in the scan." }));
+      var head = el("button", { class: "colh", onclick: function () { selectNode(id, false); } }, [
+        el("b", { text: p.label }), el("span", { text: p.files + " files" + (p.archived ? " - archived" : "") + ((hyg[id] || []).length ? " - " + hyg[id].length + " hygiene" : "") })
+      ]);
+      b.appendChild(el("section", { class: "col" + (p.archived ? " arch" : ""), "data-pid": id }, [head, body]));
+    });
+    markBoard();
+  }
+  function markBoard() {
+    var sp = nodes[selected] ? (nodes[selected].type === "project" ? selected : nodes[selected].project) : null;
+    var cols = document.querySelectorAll("#board .col");
+    for (var i = 0; i < cols.length; i++) cols[i].classList.toggle("sel", cols[i].getAttribute("data-pid") === sp);
+  }
   window.addEventListener("resize", function () { if (view3d && fg3d) fg3d.width($("viewport").clientWidth).height($("viewport").clientHeight); });
 
   /* ---------------------------------------------------------- detail panel */
@@ -410,7 +481,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       build(); node = cy.getElementById(id);
     }
     if (node.length && focus && !view3d) { cy.animate({ center: { eles: node }, zoom: Math.max(cy.zoom(), 0.9) }, { duration: 250 }); node.select(); }
-    highlight(id); renderList(); renderPanel();
+    highlight(id); renderList(); renderPanel(); if (mode === "bd") markBoard();
   }
 
   function infoPanel() {
@@ -707,6 +778,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
   $("b-collapse").addEventListener("click", function () { expanded = {}; expandedFiles = {}; build(); });
 
   build();
+  setMode("bd");
   renderPanel();
 })();
 </script>

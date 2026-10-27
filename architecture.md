@@ -1,4 +1,4 @@
-# Architecture
+﻿# Architecture
 
 Update this file when a module boundary or an external call changes.
 
@@ -35,7 +35,7 @@ Module-level detail: the project is four small files, each documented by its pub
 - Called by / Depended on by (this codebase): none.
 
 ### viewer/index.html
-- Purpose: interactive map (2D Cytoscape, 3D force graph) with project, file and function drill-down, impact highlighting, plus (when served) Chat, Files, Scripts tabs and the Setup dialog.
+- Purpose: board view (a column per project: uses, external, used by) plus an interactive map (2D Cytoscape, 3D force graph) with project, file and function drill-down, impact highlighting, plus (when served) Chat, Files, Scripts tabs and the Setup dialog.
 - Cross-module calls: loads `out/graph.js` (sets `AGENTIC_GRAPH` and `AGENTIC_IMPACT`).
 - Depends on (this codebase): `scanner/scan.py` output; `server/server.py` endpoints when served.
 - Called by / Depended on by (this codebase): none.

@@ -2,6 +2,7 @@
 
 Scan a folder of projects and see how they connect. Agentic View builds a dependency map (imports, function calls, scripts that run other scripts, projects that read each other's files, shared external systems) and lets you manage those projects from one page.
 
+- **Board:** a kanban-style view, one column per project, with cards for the projects and external systems it uses and the projects that use it.
 - **Map:** interactive 2D graph (project, then file, then function) and a 3D view, with impact highlighting.
 - **For agents:** `impact.py` answers "what depends on this file?", plus `out/graph.json`, `out/impact.json` and `out/INDEX.md`.
 - **Manage (optional local server):** stream a Claude chat per project, run and stop scanned scripts, view and edit project files, rescan, and set up Claude (install and sign in) from the page.
