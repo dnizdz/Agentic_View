@@ -60,8 +60,21 @@ Or use the launcher for your OS, which rescans, starts the server, opens the bro
 - Click a project: Chat, Files and Scripts tabs appear.
 - If the Chat tab says Claude Code is missing, open **Setup** in the page header and follow it.
 
+## 7. Desktop shortcut (optional)
+Ask the user first. Run once, from this folder:
+```
+python create_shortcut.py
+```
+| OS | Result on the Desktop | Notes |
+|---|---|---|
+| Windows | `Agentic View.lnk` | Double-click. Finds the real Desktop even when OneDrive moves it. |
+| macOS | `Agentic View.command` | Double-click. First time: right-click, Open. |
+| Ubuntu / Linux | `Agentic View.desktop` | Double-click. If it asks, right-click and choose Allow Launching. |
+
+Each shortcut runs this folder's launcher, so it asks the access level on every start. Use `python create_shortcut.py --dir <folder>` to put it elsewhere and `python create_shortcut.py --remove` to delete it. If you move the app folder, run the script again.
+
 ## Update
 Click **Update** in the page header when it appears (zip installs), or run `git pull` (git installs). See `README.md` for details.
 
 ## Uninstall
-Stop the server (Ctrl+C) and delete the folder. Nothing is installed system-wide and no project is modified by the scanner.
+Run `python create_shortcut.py --remove` if you made a shortcut, stop the server (Ctrl+C) and delete the folder. Nothing is installed system-wide and no project is modified by the scanner.

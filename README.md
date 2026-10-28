@@ -49,6 +49,8 @@ One-step launcher (rescans, starts the server, opens the browser), one per OS:
 | macOS | `start_mac.command` | double-click in Finder (first time: right-click, Open) |
 | Ubuntu / Linux | `start_ubuntu.sh` | `./start_ubuntu.sh` (first time: `chmod +x start_ubuntu.sh`) |
 
+For a Desktop icon, run `python create_shortcut.py` once (Windows `.lnk`, macOS `.command`, Linux `.desktop`). `--remove` deletes it.
+
 All three need Python 3.9+. Every launch asks how much the app may do (press Enter for the default):
 
 | Pick | Mode | What it allows |

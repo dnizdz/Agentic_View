@@ -2,6 +2,12 @@
 
 Versions follow semantic versioning. The current version is in the `VERSION` file and is shown in the page header. Each release is a git tag `vX.Y.Z`.
 
+## 1.5.6 - 2026-10-28
+### Added
+- `create_shortcut.py` makes a Desktop shortcut for the current OS (Windows `.lnk`, macOS `.command`, Linux `.desktop`); `--dir` picks another folder, `--remove` deletes it. Step 7 of `INSTALL.md`.
+### Fixed
+- The in-app Update now also replaces `INSTALL.md` and `create_shortcut.py`.
+
 ## 1.5.5 - 2026-10-28
 ### Added
 - `INSTALL.md`: step-by-step install for people and AI assistants (requirements, get the code, point at the projects folder, scan, start, check), with rules for an AI that installs it. Linked from the top of `README.md`.

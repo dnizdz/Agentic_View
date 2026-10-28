@@ -12,6 +12,7 @@ Agentic View scans a folder of projects (each immediate subfolder is one project
 - `server/server.py` - run manually via `python server/server.py`; binds 127.0.0.1, serves the viewer and the `/api/*` endpoints.
 - `start_windows.bat`, `start_mac.command`, `start_ubuntu.sh` - one launcher per OS: check Python 3.9+, then run `launcher.py`. Extra flags pass through to the server.
 - `launcher.py` - asks which access level to start with (1 read only, 2 allow edit, 3 allow bypass with a typed YES) unless a mode flag was passed or there is no terminal; then runs `scanner/scan.py` and `server/server.py` (with `AV_LAUNCHER=1`), and repeats both, keeping the same flags, when the server exits with code 75 (restart requested after an update).
+- `create_shortcut.py` - run manually via `python create_shortcut.py`; writes a Desktop shortcut that runs the OS launcher (`start_windows.bat`, `start_mac.command`, `start_ubuntu.sh`). Standard library only; Windows uses PowerShell/WScript.Shell, Linux uses `xdg-user-dir` and `gio`.
 - `INSTALL.md` - install steps for humans and AI assistants; keep in line with the flags and config keys used by `scanner/scan.py`, `server/server.py` and the launchers.
 - `VERSION` - current release number (semantic versioning); read by `server/server.py`, shown in the page header. Release history is in `CHANGELOG.md`; releases are git tags `vX.Y.Z`.
 
