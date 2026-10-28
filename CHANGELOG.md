@@ -2,6 +2,10 @@
 
 Versions follow semantic versioning. The current version is in the `VERSION` file and is shown in the page header. Each release is a git tag `vX.Y.Z`.
 
+## 1.6.0 - 2026-10-28
+### Added
+- Chat tab has a Model picker (default, Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5), remembered per project. A change restarts the live session on the next message and resumes it. The live session reports its model so a reloaded page shows the right choice.
+
 ## 1.5.6 - 2026-10-28
 ### Added
 - `create_shortcut.py` makes a Desktop shortcut for the current OS (Windows `.lnk`, macOS `.command`, Linux `.desktop`); `--dir` picks another folder, `--remove` deletes it. Step 7 of `INSTALL.md`.

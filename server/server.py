@@ -1070,7 +1070,7 @@ class H(BaseHTTPRequestHandler):
                 return (429, "too many live sessions: end one first")
             r = start_run("session", f"{b['project']} [{mode}]", argv, base, keep_stdin=True)
             r.project = b["project"]
-            r.meta = {"mode": mode, "context": ctx}
+            r.meta = {"mode": mode, "context": ctx, "model": str(model or "")}
             return r
         return start_run("chat", f"{b['project']} [{mode}]", argv, base, stdin_text=prompt)
 

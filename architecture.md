@@ -41,7 +41,7 @@ Module-level detail: the project is four small files, each documented by its pub
 - Called by / Depended on by (this codebase): none.
 
 ### viewer/index.html
-- Purpose: board view (a column per project: uses, external, used by) plus an interactive map (2D Cytoscape, 3D force graph) with project, file and function drill-down, impact highlighting, plus (when served) Chat (with Stop and Latest-message buttons), Files (folder tree, refetched on every open and after each chat turn, drag-and-drop upload, open buttons), Scripts, Scheduler Job tabs, a full-width project layout, a "Scheduler jobs only" filter, a global jobs dialog and the Setup dialog.
+- Purpose: board view (a column per project: uses, external, used by) plus an interactive map (2D Cytoscape, 3D force graph) with project, file and function drill-down, impact highlighting, plus (when served) Chat (with mode, context and model pickers, Stop and Latest-message buttons), Files (folder tree, refetched on every open and after each chat turn, drag-and-drop upload, open buttons), Scripts, Scheduler Job tabs, a full-width project layout, a "Scheduler jobs only" filter, a global jobs dialog and the Setup dialog.
 - Cross-module calls: loads `out/graph.js` (sets `AGENTIC_GRAPH` and `AGENTIC_IMPACT`).
 - Depends on (this codebase): `scanner/scan.py` output; `server/server.py` endpoints when served.
 - Called by / Depended on by (this codebase): none.

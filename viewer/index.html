@@ -663,7 +663,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
   var chats = {}, pinfo = {};
   function getChat(pid) {
     if (chats[pid]) return chats[pid];
-    var c = { pid: pid, box: el("div", { class: "term chatbox", "aria-live": "polite" }), sid: store("av.sid." + pid) || "", runId: null, live: false, busy: false, cur: null, partial: false, tools: {}, mode: AV.readOnly ? "plan" : "acceptEdits", ctx: "full", startMode: null, startCtx: null, checked: false, sync: null };
+    var c = { pid: pid, box: el("div", { class: "term chatbox", "aria-live": "polite" }), sid: store("av.sid." + pid) || "", runId: null, live: false, busy: false, cur: null, partial: false, tools: {}, mode: AV.readOnly ? "plan" : "acceptEdits", ctx: "full", model: store("av.model." + pid) || "", startMode: null, startCtx: null, startModel: "", checked: false, sync: null };
     chats[pid] = c; return c;
   }
   function stick(c, force) { if (force) c.pinned = true; if (c.pinned !== false) c.box.scrollTop = c.box.scrollHeight; }
@@ -729,8 +729,8 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     if (c.sync) c.sync();
   }
   function startSession(c, keep) {
-    return api("/api/run", "POST", { kind: "session", project: c.pid, mode: c.mode, context: c.ctx, confirm_bypass: c.mode === "bypass", session_id: c.sid || undefined })
-      .then(function (r) { c.startMode = c.mode; c.startCtx = c.ctx; attach(c, r.id, keep); return r.id; });
+    return api("/api/run", "POST", { kind: "session", project: c.pid, mode: c.mode, context: c.ctx, model: c.model || undefined, confirm_bypass: c.mode === "bypass", session_id: c.sid || undefined })
+      .then(function (r) { c.startMode = c.mode; c.startCtx = c.ctx; c.startModel = c.model; attach(c, r.id, keep); return r.id; });
   }
   function endSession(c) {
     if (!c.runId) return Promise.resolve();
@@ -740,7 +740,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     });
   }
   function sendMsg(c, text) {
-    var restart = c.live && (c.startMode !== c.mode || c.startCtx !== c.ctx);
+    var restart = c.live && (c.startMode !== c.mode || c.startCtx !== c.ctx || c.startModel !== c.model);
     return (restart ? endSession(c) : Promise.resolve())
       .then(function () { return c.live ? c.runId : startSession(c, restart); })
       .then(function (id) { c.busy = true; if (c.sync) c.sync(); return api("/api/run/" + id + "/stdin", "POST", { text: text }); })
@@ -752,7 +752,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       var run = r.runs.filter(function (x) { return x.kind === "session" && x.project === c.pid && !x.done; })[0];
       if (run && !c.live) {
         var m = run.meta || {};
-        c.mode = m.mode || c.mode; c.ctx = m.context || c.ctx; c.startMode = c.mode; c.startCtx = c.ctx;
+        c.mode = m.mode || c.mode; c.ctx = m.context || c.ctx; c.model = m.model || ""; c.startMode = c.mode; c.startCtx = c.ctx; c.startModel = c.model;
         attach(c, run.id);
         if (c.selSync) c.selSync();
       }
@@ -786,13 +786,19 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     ]);
     ctxSel.value = c.ctx;
     ctxSel.addEventListener("change", function () { c.ctx = ctxSel.value; if (c.live) addMsg(c, "sys", "context change applies on your next message"); });
+    var modelSel = el("select", { "aria-label": "Model", title: "Model for this project's chat. Changing it restarts the session on your next message and resumes it." }, [
+      el("option", { value: "", text: "Model: default" }), el("option", { value: "claude-fable-5-1", text: "Fable 5.1" }), el("option", { value: "claude-opus-5-5", text: "Opus 5.5" }),
+      el("option", { value: "claude-sonnet-5-5", text: "Sonnet 5.5" }), el("option", { value: "claude-haiku-5-5", text: "Haiku 5.5" })
+    ]);
+    modelSel.value = c.model;
+    modelSel.addEventListener("change", function () { c.model = modelSel.value; store("av.model." + pid, c.model); if (c.live) addMsg(c, "sys", "model change applies on your next message"); });
     var ta = el("textarea", { rows: "3", placeholder: "Message Claude in " + pid + " (Ctrl+Enter to send)", "aria-label": "Message" });
     var pre = store("av.prefill." + pid); if (pre) { ta.value = pre; store("av.prefill." + pid, ""); }
     var send = el("button", { class: "btn", text: "Send" });
     var endBtn = el("button", { class: "btn ghost", text: "End session" });
     var stopBtn = el("button", { class: "btn ghost", text: "Stop", title: "Interrupt Claude's current turn, like Ctrl+C. The session stays open.", disabled: "disabled" });
     var fresh = el("button", { class: "btn ghost sm", text: "New session" });
-    c.selSync = function () { sel.value = c.mode; ctxSel.value = c.ctx; syncBanner(); };
+    c.selSync = function () { sel.value = c.mode; ctxSel.value = c.ctx; modelSel.value = c.model; syncBanner(); };
     c.sync = function () {
       status.textContent = c.live ? (c.busy ? "working" : "session live") : "no session";
       status.className = "tag" + (c.live ? " warn" : "");
@@ -821,7 +827,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       c.box.addEventListener("scroll", function () { c.pinned = c.box.scrollHeight - c.box.scrollTop - c.box.clientHeight < 60; if (c.latestSync) c.latestSync(); });
       new MutationObserver(function () { if (c.latestSync) c.latestSync(); }).observe(c.box, { childList: true, subtree: true, characterData: true });
     }
-    [el("div", { class: "row", style: "margin:0" }, [status, psLine]), el("div", { class: "row", style: "margin:0" }, [sel, ctxSel, fresh]), banner, el("div", { class: "chatwrap" }, [c.box, latest]), ta, el("div", { class: "row", style: "margin:0" }, [send, stopBtn, endBtn])].forEach(function (x) { wrap.appendChild(x); });
+    [el("div", { class: "row", style: "margin:0" }, [status, psLine]), el("div", { class: "row", style: "margin:0" }, [sel, ctxSel, modelSel, fresh]), banner, el("div", { class: "chatwrap" }, [c.box, latest]), ta, el("div", { class: "row", style: "margin:0" }, [send, stopBtn, endBtn])].forEach(function (x) { wrap.appendChild(x); });
     stick(c, true); setTimeout(function () { c.latestSync(); }, 0);
     return wrap;
   }
