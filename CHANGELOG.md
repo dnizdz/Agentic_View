@@ -2,6 +2,10 @@
 
 Versions follow semantic versioning. The current version is in the `VERSION` file and is shown in the page header. Each release is a git tag `vX.Y.Z`.
 
+## 1.5.5 - 2026-10-28
+### Added
+- `INSTALL.md`: step-by-step install for people and AI assistants (requirements, get the code, point at the projects folder, scan, start, check), with rules for an AI that installs it. Linked from the top of `README.md`.
+
 ## 1.5.4 - 2026-10-28
 ### Added
 - Chat has a Stop button (like Ctrl+C): it interrupts Claude's current turn and keeps the session open. New endpoint `POST /api/run/<id>/interrupt` (chat sessions only).

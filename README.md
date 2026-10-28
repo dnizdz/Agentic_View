@@ -10,6 +10,8 @@ Scan a folder of projects and see how they connect. Agentic View builds a depend
 
 Screenshots use a made-up set of eight demo projects.
 
+**Install:** see [INSTALL.md](INSTALL.md) for step-by-step instructions. Using an AI assistant? Tell it: "Install Agentic View from https://github.com/dnizdz/Agentic_View following INSTALL.md".
+
 ## Why
 Each project has its own focus and its own tasks, so an agent working on one should not load the others. Agentic View keeps agents small to cut token usage:
 
