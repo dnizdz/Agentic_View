@@ -2,6 +2,11 @@
 
 Versions follow semantic versioning. The current version is in the `VERSION` file and is shown in the page header. Each release is a git tag `vX.Y.Z`.
 
+## 1.7.0 - 2026-10-28
+### Added
+- Live tool approval in the chat. When Claude wants a tool your mode does not already allow, the chat shows a card with the tool and its input: Approve, Approve for this session (session-only rule, nothing written to settings) or Deny. Cards survive a page reload and expire when the session ends. Applies to "Follow project settings" and "Accept edits"; plan and bypass are unchanged. Approving is refused in `--read-only`.
+- Subagent activity is nested under its Agent call with a status tag (starting, running, completed). Subagent partial text no longer mixes into the main reply.
+
 ## 1.6.0 - 2026-10-28
 ### Added
 - Chat tab has a Model picker (default, Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5), remembered per project. A change restarts the live session on the next message and resumes it. The live session reports its model so a reloaded page shows the right choice.

@@ -276,6 +276,7 @@ class Run:
         self.started = time.time()
         self.project = None
         self.meta = {}
+        self.pending, self._lbuf = {}, ""   # session only: open can_use_tool requests by request_id
         e = dict(os.environ)
         e.update({"PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"})
         e.update(env or {})
@@ -295,7 +296,43 @@ class Run:
                 pass
         threading.Thread(target=self._read, daemon=True).start()
 
+    def _scan(self, text):
+        """Track tool-permission requests the CLI sends on stdout, so /permit can answer them."""
+        self._lbuf += text
+        *lines, self._lbuf = self._lbuf.split("\n")
+        self._lbuf = self._lbuf[-200000:]
+        for ln in lines:
+            if '"control_re' not in ln:
+                continue
+            try:
+                o = json.loads(ln)
+            except ValueError:
+                continue
+            if o.get("type") == "control_request" and (o.get("request") or {}).get("subtype") == "can_use_tool":
+                self.pending[o.get("request_id")] = o["request"]
+            elif o.get("type") == "control_cancel_request":
+                self.pending.pop(o.get("request_id"), None)
+
+    def permit(self, rid, decision):
+        """Answer one pending permission request. decision: allow | allow_session | deny. Returns None or (code, msg)."""
+        req = self.pending.pop(rid, None)
+        if req is None or self.done:
+            return (404, "no such pending request")
+        if decision == "deny":
+            resp = {"behavior": "deny", "message": "Denied by the user in Agentic View"}
+        else:
+            resp = {"behavior": "allow", "updatedInput": req.get("input", {})}
+            sug = [dict(x, destination="session") for x in req.get("permission_suggestions") or []
+                   if isinstance(x, dict) and x.get("type") == "addRules"]
+            if decision == "allow_session" and sug:
+                resp["updatedPermissions"] = sug
+        self.send(json.dumps({"type": "control_response", "response": {"subtype": "success", "request_id": rid, "response": resp}}) + "\n")
+        self._push(json.dumps({"type": "av_permit", "request_id": rid, "decision": decision}) + "\n")
+        return None
+
     def _push(self, text):
+        if self.kind == "session":
+            self._scan(text)
         with self.cond:
             if self.size < MAX_RUN_BYTES:
                 self.chunks.append(text)
@@ -321,6 +358,7 @@ class Run:
         self.code = self.proc.wait()
         with self.cond:
             self.done = True
+            self.pending.clear()
             self.cond.notify_all()
         log(f"run {self.id} ({self.kind}: {self.label}) exited {self.code}")
 
@@ -937,6 +975,18 @@ class H(BaseHTTPRequestHandler):
                 return self._err(*r)
             return self._send(200, r)
 
+        m = re.match(r"^/api/run/([0-9a-f]{12})/permit$", p)
+        if m:
+            r = S["runs"].get(m.group(1))
+            if not r or r.kind != "session":
+                return self._err(404, "unknown session")
+            if b.get("decision") not in ("allow", "allow_session", "deny") or not isinstance(b.get("request_id"), str):
+                return self._err(400, "needs request_id and decision")
+            if b["decision"] != "deny" and S["read_only"]:
+                return self._err(403, "server is read-only")
+            e = r.permit(b["request_id"], b["decision"])
+            return self._err(*e) if e else self._send(200, {"ok": True})
+
         m = re.match(r"^/api/run/([0-9a-f]{12})/(stdin|stop|interrupt)$", p)
         if m:
             r = S["runs"].get(m.group(1))
@@ -1065,6 +1115,8 @@ class H(BaseHTTPRequestHandler):
             if not MODEL_RE.match(str(model)):
                 return (400, "bad model")
             argv += ["--model", str(model)]
+        if persistent and mode in ("project", "acceptEdits"):
+            argv += ["--permission-prompt-tool", "stdio"]   # the page answers tool prompts (Approve / Deny cards)
         if persistent:
             if sum(1 for r in S["runs"].values() if r.kind == "session" and not r.done) >= 6:
                 return (429, "too many live sessions: end one first")

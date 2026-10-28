@@ -95,6 +95,10 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
 .tool b { color: var(--calls); font-weight: 500; }
 .tool details { margin-top: 2px; }
 .tool pre { margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow: auto; }
+.subagent { margin: 4px 0 0 6px; padding-left: 8px; border-left: 1px dashed var(--calls); }
+.perm { margin: 8px 0; border: 1px solid var(--accent); border-radius: 8px; padding: 8px 10px; background: rgba(99,102,241,.08); }
+.perm.done { border-color: var(--text-dim); background: none; opacity: .7; }
+.perm pre { margin: 4px 0 6px; white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow: auto; }
 .banner { background: rgba(239,68,68,.15); border: 1px solid var(--danger); color: #fecaca; border-radius: 8px; padding: 6px 10px; margin: 6px 0; font-size: 12px; }
 .ed { width: 100%; flex: 1; min-height: 240px; font: 400 12px/1.5 var(--mono); resize: none; white-space: pre; tab-size: 4; }
 .modal { position: fixed; inset: 0; background: rgba(2,6,23,.7); display: none; align-items: center; justify-content: center; z-index: 40; padding: 16px; }
@@ -663,11 +667,11 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
   var chats = {}, pinfo = {};
   function getChat(pid) {
     if (chats[pid]) return chats[pid];
-    var c = { pid: pid, box: el("div", { class: "term chatbox", "aria-live": "polite" }), sid: store("av.sid." + pid) || "", runId: null, live: false, busy: false, cur: null, partial: false, tools: {}, mode: AV.readOnly ? "plan" : "acceptEdits", ctx: "full", model: store("av.model." + pid) || "", startMode: null, startCtx: null, startModel: "", checked: false, sync: null };
+    var c = { pid: pid, box: el("div", { class: "term chatbox", "aria-live": "polite" }), sid: store("av.sid." + pid) || "", runId: null, live: false, busy: false, cur: null, partial: false, tools: {}, subs: {}, agents: {}, perm: {}, mode: AV.readOnly ? "plan" : "acceptEdits", ctx: "full", model: store("av.model." + pid) || "", startMode: null, startCtx: null, startModel: "", checked: false, sync: null };
     chats[pid] = c; return c;
   }
   function stick(c, force) { if (force) c.pinned = true; if (c.pinned !== false) c.box.scrollTop = c.box.scrollHeight; }
-  function addMsg(c, cls, text) { var e = el("div", { class: "msg " + cls, text: text }); c.box.appendChild(e); stick(c, cls === "user"); return e; }
+  function addMsg(c, cls, text, into) { var e = el("div", { class: "msg " + cls, text: text }); (into || c.box).appendChild(e); stick(c, cls === "user" && !into); return e; }
   function toolSummary(inp) {
     if (!inp) return "";
     var s = inp.command || inp.file_path || inp.pattern || inp.path || inp.url || inp.description || JSON.stringify(inp);
@@ -679,10 +683,43 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     if (!Array.isArray(cn)) return "";
     return cn.filter(function (b) { return b.type === "text"; }).map(function (b) { return b.text; }).join("\n");
   }
+  function permCard(c, rid, rq) {
+    if (c.perm[rid]) return;
+    var info = el("span", { class: "sub", text: "" }), card = el("div", { class: "perm", role: "alert" });
+    function answer(d) {
+      Array.prototype.forEach.call(card.querySelectorAll("button"), function (x) { x.disabled = true; });
+      api("/api/run/" + c.runId + "/permit", "POST", { request_id: rid, decision: d }).catch(function (e) { info.textContent = e.message; });
+    }
+    var btns = [el("button", { class: "btn sm", text: "Approve", onclick: function () { answer("allow"); } })];
+    if ((rq.permission_suggestions || []).length) btns.push(el("button", { class: "btn ghost sm", text: "Approve for this session", title: "Allows the suggested rule until this session ends. Nothing is written to your settings.", onclick: function () { answer("allow_session"); } }));
+    btns.push(el("button", { class: "btn ghost sm", text: "Deny", onclick: function () { answer("deny"); } }));
+    card.appendChild(el("div", {}, [el("b", { text: "Approval needed: " + (rq.display_name || rq.tool_name) }), " ", info]));
+    card.appendChild(el("pre", { text: JSON.stringify(rq.input, null, 1).slice(0, 1200) }));
+    card.appendChild(el("div", { class: "row", style: "margin:0" }, btns));
+    c.perm[rid] = { card: card, info: info }; c.box.appendChild(card); stick(c, true);
+  }
+  function permDone(c, rid, d) {
+    var p = c.perm[rid]; if (!p) return;
+    var n = el("div", { class: "sub", text: d === "deny" ? "denied" : d === "cancel" ? "request cancelled" : "approved" + (d === "allow_session" ? " for this session" : "") });
+    p.card.className = "perm done"; Array.prototype.slice.call(p.card.querySelectorAll(".row")).forEach(function (x) { x.remove(); }); p.card.appendChild(n);
+  }
+  function permExpire(c) { Object.keys(c.perm).forEach(function (k) { if (c.perm[k].card.querySelector("button")) permDone(c, k, "cancel"); }); }
+  function agentStatus(c, o) {
+    var st = c.agents[o.tool_use_id]; if (!st) return;
+    if (o.subtype === "task_started") st.textContent = "running";
+    else if (o.subtype === "task_progress") st.textContent = "running: " + (o.description || "") + (o.usage ? " (" + o.usage.tool_uses + " tools)" : "");
+    else if (o.subtype === "task_notification") { st.textContent = o.status || "done"; st.className = "tag"; }
+  }
   function chatEvent(c, line) {
     var o; try { o = JSON.parse(line); } catch (e) { addMsg(c, "sys", line); return; }
+    var par = o.parent_tool_use_id && c.subs[o.parent_tool_use_id], into = par || c.box;   // a subagent's own messages nest under its Agent call
+    if (o.type === "av_permit") { permDone(c, o.request_id, o.decision); return; }
+    if (o.type === "control_cancel_request") { permDone(c, o.request_id, "cancel"); return; }
+    if (o.type === "control_request" && o.request && o.request.subtype === "can_use_tool") { permCard(c, o.request_id, o.request); return; }
+    if (o.type === "system" && /^task_/.test(o.subtype || "")) { agentStatus(c, o); return; }
     if (o.type === "system" && o.subtype === "init") { c.sid = o.session_id || c.sid; store("av.sid." + c.pid, c.sid); }
     else if (o.type === "stream_event") {
+      if (o.parent_tool_use_id) return;
       var ev = o.event || {};
       if (ev.type === "message_start") { c.cur = null; c.partial = false; }
       else if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") {
@@ -691,15 +728,20 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       }
     } else if (o.type === "assistant" && o.message && Array.isArray(o.message.content)) {
       o.message.content.forEach(function (b) {
-        if (b.type === "text" && !c.partial && b.text) addMsg(c, "asst", b.text);
+        if (b.type === "text" && (par || !c.partial) && b.text) addMsg(c, "asst", b.text, par);
         else if (b.type === "tool_use") {
-          var t = el("div", { class: "tool" }, [el("b", { text: b.name }), " " + toolSummary(b.input)]);
-          c.tools[b.id] = t; c.box.appendChild(t);
+          var isAgent = b.name === "Agent" || b.name === "Task", st = isAgent ? el("span", { class: "tag", text: "starting" }) : null;
+          var t = el("div", { class: "tool" }, [el("b", { text: b.name }), " " + (isAgent ? ((b.input && b.input.subagent_type) || "agent") + ": " + ((b.input && b.input.description) || "") : toolSummary(b.input)), st ? " " : "", st || ""]);
+          if (isAgent) {
+            var body = el("div", { class: "subagent" }), det = el("details", { open: "open" }, [el("summary", { text: "subagent activity" }), body]);
+            t.appendChild(det); c.subs[b.id] = body; c.agents[b.id] = st;
+          }
+          c.tools[b.id] = t; into.appendChild(t);
         }
       });
-      c.cur = null; c.partial = false; stick(c);
+      if (!par) { c.cur = null; c.partial = false; } stick(c);
     } else if (o.type === "user" && o.message) {
-      var ut = userText(o); if (ut) addMsg(c, "user", ut);
+      var ut = userText(o); if (ut && !o.parent_tool_use_id) addMsg(c, "user", ut);
       if (Array.isArray(o.message.content)) o.message.content.forEach(function (b) {
         if (b.type === "tool_result" && c.tools[b.tool_use_id]) {
           var txt = typeof b.content === "string" ? b.content : JSON.stringify(b.content);
@@ -715,7 +757,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     }
   }
   function attach(c, runId, keep) {
-    c.runId = runId; c.live = true; c.busy = false; c.cur = null; c.tools = {};
+    c.runId = runId; c.live = true; c.busy = false; c.cur = null; c.tools = {}; c.subs = {}; c.agents = {}; c.perm = {};
     if (!keep) c.box.innerHTML = "";
     var feed = "";
     streamRun(runId, function (t) {
@@ -723,6 +765,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       while ((i = feed.indexOf("\n")) >= 0) { var line = feed.slice(0, i); feed = feed.slice(i + 1); if (line.trim()) chatEvent(c, line); }
     }, function (code) {
       if (feed.trim()) chatEvent(c, feed);
+      permExpire(c);
       if (c.runId === runId) { c.runId = null; c.live = false; c.busy = false; addMsg(c, "sys", "session ended" + (code ? " (code " + code + ")" : "") + ". Send a message to resume it."); }
       if (c.sync) c.sync();
     });
