@@ -2,6 +2,13 @@
 
 Versions follow semantic versioning. The current version is in the `VERSION` file and is shown in the page header. Each release is a git tag `vX.Y.Z`.
 
+## 1.5.4 - 2026-10-28
+### Added
+- Chat has a Stop button (like Ctrl+C): it interrupts Claude's current turn and keeps the session open. New endpoint `POST /api/run/<id>/interrupt` (chat sessions only).
+- Files tab has a Refresh button.
+### Fixed
+- Files created by Claude (or a script) did not appear in the Files tab until the page was reloaded. The tab now reloads the list every time it opens and after each finished chat turn.
+
 ## 1.5.3 - 2026-10-28
 ### Changed
 - The Update button is hidden unless a newer release exists. The version is checked on every page open.

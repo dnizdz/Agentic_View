@@ -937,13 +937,19 @@ class H(BaseHTTPRequestHandler):
                 return self._err(*r)
             return self._send(200, r)
 
-        m = re.match(r"^/api/run/([0-9a-f]{12})/(stdin|stop)$", p)
+        m = re.match(r"^/api/run/([0-9a-f]{12})/(stdin|stop|interrupt)$", p)
         if m:
             r = S["runs"].get(m.group(1))
             if not r:
                 return self._err(404, "unknown run")
             if m.group(2) == "stop":
                 r.stop()
+            elif m.group(2) == "interrupt":
+                if r.kind != "session":
+                    return self._err(403, "interrupt is for chat sessions only")
+                if r.done:
+                    return self._err(409, "session has ended")
+                r.send(json.dumps({"type": "control_request", "request_id": "int_" + uuid.uuid4().hex[:8], "request": {"subtype": "interrupt"}}) + "\n")
             elif r.kind == "login":
                 r.send(str(b.get("text", ""))[:4000])
             elif r.kind == "session":

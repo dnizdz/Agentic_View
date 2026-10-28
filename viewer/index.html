@@ -711,7 +711,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       var dn = o.permission_denials || [];
       if (dn.length) addMsg(c, "err", "blocked by permissions: " + dn.map(function (d) { return d.tool_name + " " + toolSummary(d.tool_input); }).join("; ") + ". Switch the mode to Accept edits (or Bypass) and ask again.");
       if (o.session_id) { c.sid = o.session_id; store("av.sid." + c.pid, c.sid); }
-      c.busy = false; if (c.sync) c.sync();
+      c.busy = false; delete fileCache[c.pid]; if (c.sync) c.sync();
     }
   }
   function attach(c, runId, keep) {
@@ -790,13 +790,23 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     var pre = store("av.prefill." + pid); if (pre) { ta.value = pre; store("av.prefill." + pid, ""); }
     var send = el("button", { class: "btn", text: "Send" });
     var endBtn = el("button", { class: "btn ghost", text: "End session" });
+    var stopBtn = el("button", { class: "btn ghost", text: "Stop", title: "Interrupt Claude's current turn, like Ctrl+C. The session stays open.", disabled: "disabled" });
     var fresh = el("button", { class: "btn ghost sm", text: "New session" });
     c.selSync = function () { sel.value = c.mode; ctxSel.value = c.ctx; syncBanner(); };
     c.sync = function () {
       status.textContent = c.live ? (c.busy ? "working" : "session live") : "no session";
       status.className = "tag" + (c.live ? " warn" : "");
-      send.disabled = c.busy; endBtn.disabled = !c.live;
+      send.disabled = c.busy; endBtn.disabled = !c.live; stopBtn.disabled = !(c.live && c.busy);
     };
+    stopBtn.addEventListener("click", function () {
+      if (!c.live || !c.busy) return;
+      stopBtn.disabled = true;
+      api("/api/run/" + c.runId + "/interrupt", "POST", {}).then(function () {
+        addMsg(c, "sys", "stop requested");
+        var rid = c.runId;   // fallback if the CLI sends no result event for the interrupted turn
+        setTimeout(function () { if (c.runId === rid && c.busy) { c.busy = false; delete fileCache[pid]; if (c.sync) c.sync(); } }, 4000);
+      }).catch(function (e) { addMsg(c, "err", e.message); if (c.sync) c.sync(); });
+    });
     function go() { var text = ta.value.trim(); if (!text || c.busy) return; ta.value = ""; sendMsg(c, text); }
     send.addEventListener("click", go);
     endBtn.addEventListener("click", function () { endSession(c); });
@@ -811,7 +821,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       c.box.addEventListener("scroll", function () { c.pinned = c.box.scrollHeight - c.box.scrollTop - c.box.clientHeight < 60; if (c.latestSync) c.latestSync(); });
       new MutationObserver(function () { if (c.latestSync) c.latestSync(); }).observe(c.box, { childList: true, subtree: true, characterData: true });
     }
-    [el("div", { class: "row", style: "margin:0" }, [status, psLine]), el("div", { class: "row", style: "margin:0" }, [sel, ctxSel, fresh]), banner, el("div", { class: "chatwrap" }, [c.box, latest]), ta, el("div", { class: "row", style: "margin:0" }, [send, endBtn])].forEach(function (x) { wrap.appendChild(x); });
+    [el("div", { class: "row", style: "margin:0" }, [status, psLine]), el("div", { class: "row", style: "margin:0" }, [sel, ctxSel, fresh]), banner, el("div", { class: "chatwrap" }, [c.box, latest]), ta, el("div", { class: "row", style: "margin:0" }, [send, stopBtn, endBtn])].forEach(function (x) { wrap.appendChild(x); });
     stick(c, true); setTimeout(function () { c.latestSync(); }, 0);
     return wrap;
   }
@@ -895,10 +905,9 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       rd.readAsDataURL(f);
     }
     function hasFiles(e) { return e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") >= 0; }
-    function load() {
-      if (fileCache[pid]) return draw();
-      list.textContent = "loading...";
-      api("/api/files?project=" + encodeURIComponent(pid)).then(function (r) { fileCache[pid] = r.files; draw(); }).catch(function (e) { list.textContent = e.message; });
+    function load() {   // always refetch: Claude or scripts may have created files since the last visit
+      if (fileCache[pid]) draw(); else list.textContent = "loading...";
+      api("/api/files?project=" + encodeURIComponent(pid)).then(function (r) { fileCache[pid] = r.files; draw(); }).catch(function (e) { if (!fileCache[pid]) list.textContent = e.message; });
     }
     list.addEventListener("dragover", function (e) { if (!hasFiles(e)) return; e.preventDefault(); list.classList.add("over"); });
     list.addEventListener("dragleave", function (e) { if (e.target === list) list.classList.remove("over"); });
@@ -907,6 +916,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     filter.addEventListener("input", draw);
     wrap.appendChild(el("div", { class: "row", style: "margin:0" }, [
       el("div", { class: "sub", style: "flex:1", text: (AV.readOnly ? "Read-only server: files can be viewed, not saved or uploaded. " : "Click a file to view or edit. Drag files from Explorer/Finder onto a folder to copy them in (onto the empty area for the project root). ") + "Secret files are never shown." }),
+      el("button", { class: "btn ghost sm", text: "Refresh", title: "Reload the file list", onclick: load }),
       el("button", { class: "btn ghost sm", text: "Show project folder", title: "Open the project folder in Explorer/Finder", onclick: function () { openOnDisk(pid, "", "reveal"); } })
     ]));
     wrap.appendChild(filter); wrap.appendChild(list);
