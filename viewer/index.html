@@ -201,6 +201,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
       <span><i style="border-color:var(--reads)"></i>reads files</span>
       <span><i style="border-color:var(--runs)"></i>runs</span>
       <span><i style="border-color:var(--target)"></i>uses target</span>
+      <span><i style="border-color:#94a3b8"></i>mentioned in docs</span>
       <span>dashed = heuristic</span>
     </div>
   </main>
@@ -298,7 +299,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     $("stats").appendChild(el("span", {}, [s[0] + " ", el("b", { text: String(s[1]) })]));
   });
 
-  var KCOL = { imports: "#60a5fa", reads_file: "#fbbf24", runs: "#22c55e", uses_target: "#c084fc", calls: "#f472b6", declared: "#38bdf8" };
+  var KCOL = { imports: "#60a5fa", reads_file: "#fbbf24", runs: "#22c55e", uses_target: "#c084fc", calls: "#f472b6", declared: "#38bdf8", mentions: "#94a3b8" };
   var cy = cytoscape({
     container: $("cy"), wheelSensitivity: 0.25, minZoom: 0.05, maxZoom: 4,
     style: [
@@ -361,7 +362,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     });
     var agg = {};
     G.edges.forEach(function (e) {
-      if (!showHeur && (e.confidence === "heuristic" || e.confidence === "doc")) return;
+      if (!showHeur && (e.confidence === "heuristic" || e.confidence === "doc") && e.kind !== "mentions") return;
       var tn = nodes[e.to], fn = nodes[e.from]; if (!tn || !fn) return;
       if (tn.type === "target") {
         if (tn.tkind === "env" && !showEnv) return;
@@ -485,7 +486,7 @@ h2 { font: 600 15px var(--mono); margin: 0 0 4px; word-break: break-word; }
     var q = $("q").value.trim().toLowerCase();
     var deps = {}, tgs = {}, usedBy = {};
     G.edges.forEach(function (e) {
-      if (!showHeur && (e.confidence === "heuristic" || e.confidence === "doc")) return;
+      if (!showHeur && (e.confidence === "heuristic" || e.confidence === "doc") && e.kind !== "mentions") return;
       var a = nodes[e.from], t = nodes[e.to];
       if (!a || !t || !a.project) return;
       var pa = a.project;

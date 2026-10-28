@@ -137,7 +137,7 @@ def discover(roots, cfg):
                 dnames[:] = keep
                 for fn in fnames:
                     ext = os.path.splitext(fn)[1].lower()
-                    if ext not in LANG and fn not in ("CLAUDE.md", ".clasp.json", "appsscript.json"):
+                    if ext not in LANG and fn not in ("CLAUDE.md", "architecture.md", ".clasp.json", "appsscript.json"):
                         continue
                     if is_excluded_file(fn, cfg):
                         continue
@@ -311,6 +311,7 @@ def scan(cfg, roots, use_cache=True):
     facts = {}      # node id -> parsed facts
     docs = {}       # project -> claude.md summary
     declared = {}   # project -> names listed under "## Related projects" in its CLAUDE.md
+    doctext = {}    # project -> {doc file: text} of root CLAUDE.md and architecture.md, read for project-name mentions
 
     for pid, p in projects.items():
         nodes[pid] = {"id": pid, "type": "project", "label": pid.split("/")[-1],
@@ -334,8 +335,12 @@ def scan(cfg, roots, use_cache=True):
                 txt = read_text(ap, cfg["max_text_bytes"]) or ""
                 docs[pid] = summarize_md(txt)
                 declared[pid] = parse_related(txt)
+                doctext.setdefault(pid, {})[name] = txt
                 continue
-            if name in ("CLAUDE.md", "appsscript.json"):
+            if name == "architecture.md" and len(ap.relative_to(projects[pid]["path"]).parts) == 1:
+                doctext.setdefault(pid, {})[name] = read_text(ap, cfg["max_text_bytes"]) or ""
+                continue
+            if name in ("CLAUDE.md", "architecture.md", "appsscript.json"):
                 continue
             if name == ".clasp.json":
                 nodes[fid] = {"id": fid, "type": "file", "label": name, "project": pid, "path": rel,
@@ -525,6 +530,17 @@ def scan(cfg, roots, use_cache=True):
             for tp in list(pname_to_pid.get(nm, [])) + ([nm] if nm in projects else []):
                 if tp != pid:
                     add_edge(pid, tp, "declared", "CLAUDE.md", "exact")
+
+    # project names mentioned in a project's own CLAUDE.md / architecture.md prose (weak link, tagged "doc")
+    dnames = [n for n in pname_to_pid if len(n) >= 5]
+    if dnames:
+        mention_re = re.compile(r"(?<![\w-])(" + "|".join(re.escape(n) for n in sorted(dnames, key=len, reverse=True)) + r")(?![\w-])")
+        for pid, by_file in doctext.items():
+            for dname, txt in by_file.items():
+                for nm in set(mention_re.findall(txt)):
+                    for tp in pname_to_pid[nm]:
+                        if tp != pid and (not projects[tp]["archived"] or projects[pid]["archived"]):
+                            add_edge(pid, tp, "mentions", dname, "doc")
 
     # function nodes and call edges (python, non-archived)
     file_funcs = {}

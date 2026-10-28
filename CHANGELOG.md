@@ -2,6 +2,10 @@
 
 Versions follow semantic versioning. The current version is in the `VERSION` file and is shown in the page header. Each release is a git tag `vX.Y.Z`.
 
+## 1.8.0 - 2026-10-28
+### Added
+- The scanner now reads each project's root `architecture.md` (and the prose of its `CLAUDE.md`) for names of other projects. A match adds a `mentions` edge tagged `doc`: shown on the map and board by default as a dashed grey-blue line, labelled "mentioned in docs". Names need 5+ characters and an exact, case-sensitive match. Mentions are not counted in impact lists. `## Related projects` in `CLAUDE.md` still gives the firm `declared` edge.
+
 ## 1.7.0 - 2026-10-28
 ### Added
 - Live tool approval in the chat. When Claude wants a tool your mode does not already allow, the chat shows a card with the tool and its input: Approve, Approve for this session (session-only rule, nothing written to settings) or Deny. Cards survive a page reload and expire when the session ends. Applies to "Follow project settings" and "Accept edits"; plan and bypass are unchanged. Approving is refused in `--read-only`.
