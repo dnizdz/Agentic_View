@@ -218,12 +218,31 @@ None currently.{(' Planned related projects: ' + ', '.join(related) + '.') if re
 
 
 # ------------------------------------------------------------------ claude
+_shell_probe = [0.0, None]
+
+
 def claude_bin():
     found = shutil.which("claude")
     if found:
         return found
-    cand = Path.home() / ".local" / "bin" / ("claude.exe" if os.name == "nt" else "claude")
-    return str(cand) if cand.exists() else None
+    home = Path.home()
+    if os.name == "nt":
+        cands = [home / ".local" / "bin" / "claude.exe"]
+    else:
+        cands = [home / ".local" / "bin" / "claude", home / ".claude" / "local" / "claude",
+                 home / ".npm-global" / "bin" / "claude", home / ".bun" / "bin" / "claude",
+                 Path("/opt/homebrew/bin/claude"), Path("/usr/local/bin/claude")]
+    for cand in cands:
+        if cand.is_file() and os.access(cand, os.X_OK):
+            return str(cand)
+    if os.name != "nt" and time.time() - _shell_probe[0] > 60:
+        # PATH can miss nvm or custom npm prefixes when launched from Finder: ask the login shell (at most once a minute)
+        sh = os.environ.get("SHELL") or "/bin/zsh"
+        out = run_capture([sh, "-l", "-i", "-c", "command -v claude"], timeout=8)
+        line = out.splitlines()[-1].strip() if out else ""
+        _shell_probe[0] = time.time()
+        _shell_probe[1] = line if line.startswith("/") and os.access(line, os.X_OK) else None
+    return _shell_probe[1] if os.name != "nt" else None
 
 
 def run_capture(argv, timeout=15):
