@@ -2,6 +2,10 @@
 
 Versions follow semantic versioning. The current version is in the `VERSION` file and is shown in the page header. Each release is a git tag `vX.Y.Z`.
 
+## 1.8.2 - 2026-10-29
+### Fixed
+- A fresh download no longer fails its first scan when the projects folder is empty. If the scan finds no projects, it creates an empty `New` folder in the root and scans again. Existing roots are never touched.
+
 ## 1.8.1 - 2026-10-29
 ### Fixed
 - Setup no longer offers to install Claude when it is already installed on macOS or Linux. Detection now also checks `~/.claude/local`, `~/.npm-global`, `~/.bun`, `/opt/homebrew/bin` and `/usr/local/bin`, then asks the login shell (`command -v claude`) for nvm and custom npm prefixes.

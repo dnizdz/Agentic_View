@@ -892,6 +892,12 @@ def main():
     log(f"config: {cfg_path or 'defaults'}; root: {Path(cfg['root']).resolve()}")
 
     graph = scan(cfg, roots, use_cache=not args.no_cache)
+    root_dir = Path(cfg["root"]).resolve()
+    if not graph["meta"]["projects"] and root_dir.is_dir() and not (root_dir / "New").exists():
+        # fresh download: the root holds no projects yet, so give it one placeholder instead of failing
+        (root_dir / "New").mkdir()
+        log(f"No projects in {root_dir}. Created an empty 'New' folder there so the scan has something to read.")
+        graph = scan(cfg, roots, use_cache=not args.no_cache)
     if not graph["meta"]["projects"]:
         log(f"No projects found in {Path(cfg['root']).resolve()}. 'root' must be a folder whose "
             f"subfolders are your projects. Edit scanner/config.local.json (use forward slashes, "
