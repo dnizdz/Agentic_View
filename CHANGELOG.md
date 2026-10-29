@@ -2,6 +2,10 @@
 
 Versions follow semantic versioning. The current version is in the `VERSION` file and is shown in the page header. Each release is a git tag `vX.Y.Z`.
 
+## 1.8.3 - 2026-10-29
+### Fixed
+- A long chat no longer stops with "output limit reached, further output dropped". A chat session now keeps up to 20 MB of output and, past that, drops the oldest output instead of the newest, so the chat keeps updating. After a trim, a page reload replays from the oldest kept line. Scripts and other runs keep the 5 MB cap.
+
 ## 1.8.2 - 2026-10-29
 ### Fixed
 - A fresh download no longer fails its first scan when the projects folder is empty. If the scan finds no projects, it creates an empty `New` folder in the root and scans again. Existing roots are never touched.

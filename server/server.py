@@ -54,7 +54,8 @@ SECRET_GLOBS = CFG["exclude_file_globs"] + [".env*", "*.secret", "id_rsa*", "*.p
 SKIP_DIRS = set(CFG["exclude_dir_names"]) | {".git"}
 MAX_BODY = 2_000_000
 MAX_FILE = 1_000_000
-MAX_RUN_BYTES = 5_000_000
+MAX_RUN_BYTES = 5_000_000          # scripts and other runs: stop keeping output past this
+MAX_SESSION_BYTES = 20_000_000     # chat sessions: drop the oldest output past this
 OUT_FILES = {"graph.js", "graph.json", "impact.json", "INDEX.md"}
 SID_RE = re.compile(r"^[0-9a-fA-F-]{36}$")
 MODEL_RE = re.compile(r"^[A-Za-z0-9._\[\]-]{1,60}$")
@@ -291,6 +292,7 @@ class Run:
         self.id = uuid.uuid4().hex[:12]
         self.kind, self.label, self.argv, self.cwd = kind, label, argv, str(cwd)
         self.chunks, self.size, self.done, self.code = [], 0, False, None
+        self.base, self.nl = 0, []   # base = absolute index of chunks[0]; nl[k] = chunks[k] ends a line
         self.cond = threading.Condition()
         self.started = time.time()
         self.project = None
@@ -353,12 +355,31 @@ class Run:
         if self.kind == "session":
             self._scan(text)
         with self.cond:
-            if self.size < MAX_RUN_BYTES:
+            if self.kind == "session":
+                self.chunks.append(text)
+                self.nl.append(text.endswith("\n"))
+                self.size += len(text)
+                if self.size > MAX_SESSION_BYTES:
+                    self._trim()
+            elif self.size < MAX_RUN_BYTES:
                 self.chunks.append(text)
                 self.size += len(text)
                 if self.size >= MAX_RUN_BYTES:
                     self.chunks.append("\n[output limit reached, further output dropped]\n")
             self.cond.notify_all()
+
+    def _trim(self):
+        """Session only, called with self.cond held: drop oldest chunks to about 80% of the cap, keeping the first chunk left at a line start."""
+        k, size = 0, self.size
+        while k < len(self.chunks) - 1 and size > MAX_SESSION_BYTES * 0.8:
+            size -= len(self.chunks[k])
+            k += 1
+        while 0 < k < len(self.chunks) - 1 and not self.nl[k - 1]:
+            size -= len(self.chunks[k])
+            k += 1
+        del self.chunks[:k], self.nl[:k]
+        self.base += k
+        self.size = size
 
     def _read(self):
         dec = codecs.getincrementaldecoder("utf-8")("replace")
@@ -910,12 +931,14 @@ class H(BaseHTTPRequestHandler):
         try:
             while True:
                 with r.cond:
-                    while i >= len(r.chunks) and not r.done:
+                    i = max(i, r.base)   # oldest chunks may be dropped (sessions)
+                    while i >= r.base + len(r.chunks) and not r.done:
                         r.cond.wait(timeout=10)
-                        if i >= len(r.chunks) and not r.done:
+                        if i >= r.base + len(r.chunks) and not r.done:
                             break
-                    batch = r.chunks[i:]
-                    done = r.done and i + len(batch) >= len(r.chunks)
+                    i = max(i, r.base)
+                    batch = r.chunks[i - r.base:]
+                    done = r.done and i + len(batch) >= r.base + len(r.chunks)
                 if batch:
                     for t in batch:
                         self.wfile.write(("data: " + json.dumps({"i": i, "t": t}) + "\n\n").encode("utf-8"))
